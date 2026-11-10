@@ -186,6 +186,9 @@ input[type=text]{font:inherit;color:var(--ink);background:var(--panel);border:1p
   <label class="check" for="blur"><input id="blur" type="checkbox" checked>Приховувати обличчя на відео та в картці</label>
   <label class="check" for="trail"><input id="trail" type="checkbox">Показувати траєкторію переміщення</label>
   <div class="range" id="rangeBox">
+    <b class="small">Кого аналізувати</b>
+    <div class="row"><button id="pPick" type="button">Обрати людину</button><button id="pClear" type="button" hidden>Скинути вибір</button></div>
+    <p class="small" id="pState"></p>
     <b class="small" id="rangeTitle">Відрізок для аналізу</b>
     <div class="row"><label for="rA">Початок</label><input id="rA" type="text" inputmode="text" placeholder="0:00" autocomplete="off"><button id="rASet" type="button">Узяти з кадру</button></div>
     <div class="row"><label for="rB">Кінець</label><input id="rB" type="text" inputmode="text" placeholder="кінець" autocomplete="off"><button id="rBSet" type="button">Узяти з кадру</button></div>
@@ -360,6 +363,7 @@ input[type=text]{font:inherit;color:var(--ink);background:var(--panel);border:1p
     <li>Кнопка «Дані CSV» зберігає кути й бали REBA для кожного кадру, щоб звірити їх із ручною оцінкою.</li>
     <li>Переміщення оцінюється за горизонтальним рухом таза в кадрі, масштаб береться зі зросту. Оцінка приблизна і має сенс лише при нерухомій камері.</li>
     <li>Для довгого відео задайте відрізок: аналізується лише він, і всі показники рахуються тільки для нього. Відео довше 2 хвилин не аналізується автоматично, доки ви не оберете відрізок або все відео.</li>
+    <li>Якщо в кадрі кілька людей, натисніть «Обрати людину» й тицьніть на потрібну. Інструмент далі веде вікно навколо неї та аналізує лише його. Стеження може збитися, якщо люди перекривають одне одного або обрана людина надовго зникає з кадру.</li>
     <li>Знімайте збоку, перпендикулярно до руху, щоб людина була в кадрі на повний зріст. Це 2D-оцінка: скручування тулуба і вагу вантажу вона не бачить, тому ці пункти позначте у формі під висновком REBA.</li>
   </ul>
 </section>
@@ -644,9 +648,51 @@ function parseT(str){
   else if(m.length===3)v=parseFloat(m[0])*3600+parseFloat(m[1])*60+parseFloat(m[2]);
   return isFinite(v)&&v>=0?v:NaN;
 }
-var LONG=120;
-async function analyze(key,file,range,whole){
-  var my=++busy;playing=false;
+var LONG=120,pickMode=false,pickT=0;
+var cropCv=document.createElement("canvas");
+async function runCrop(pose,v,c){
+  var sc=Math.min(1,480/Math.max(c.w,c.h)),cw=Math.max(32,Math.round(c.w*sc)),chh=Math.max(32,Math.round(c.h*sc));
+  if(cropCv.width!==cw||cropCv.height!==chh){cropCv.width=cw;cropCv.height=chh}
+  cropCv.getContext("2d").drawImage(v,c.x,c.y,c.w,c.h,0,0,cw,chh);
+  lastRes=null;await pose.send({image:cropCv});
+  var lm=lastRes&&lastRes.poseLandmarks;
+  if(!lm||lm.length<29)return null;
+  return lm.map(function(q){return [c.x+q.x*c.w,c.y+q.y*c.h,q.visibility==null?1:q.visibility]});
+}
+function lmBox(P,VW,VH){
+  var xs=[],ys=[];
+  P.forEach(function(q){if(q[2]>0.2){xs.push(q[0]);ys.push(q[1])}});
+  if(xs.length<6){xs=P.map(function(q){return q[0]});ys=P.map(function(q){return q[1]})}
+  var x0=Math.max(0,Math.min.apply(null,xs)),x1=Math.min(VW,Math.max.apply(null,xs)),y0=Math.max(0,Math.min.apply(null,ys)),y1=Math.min(VH,Math.max.apply(null,ys));
+  return {x:x0,y:y0,w:Math.max(1,x1-x0),h:Math.max(1,y1-y0)};
+}
+function grow(b,m,VW,VH){
+  var bw=Math.max(b.w,b.h*0.5,48),bh=Math.max(b.h,48),cx=b.x+b.w/2,cy=b.y+b.h/2;
+  var x0=Math.max(0,cx-bw/2-bw*m),x1=Math.min(VW,cx+bw/2+bw*m),y0=Math.max(0,cy-bh/2-bh*m),y1=Math.min(VH,cy+bh/2+bh*m);
+  return {x:x0,y:y0,w:Math.max(8,x1-x0),h:Math.max(8,y1-y0)};
+}
+function inside(a,c){return a.x>=c.x-1&&a.y>=c.y-1&&a.x+a.w<=c.x+c.w+1&&a.y+a.h<=c.y+c.h+1}
+async function probe(pose,v,px,py){
+  var VW=v.videoWidth,VH=v.videoHeight,fr=[1,0.8,0.55,0.35,0.2],i;
+  for(i=0;i<fr.length;i++){
+    var c;
+    if(fr[i]===1)c={x:0,y:0,w:VW,h:VH};
+    else{var ch=VH*fr[i],cw=Math.min(VW,ch*0.8);c={x:Math.max(0,Math.min(VW-cw,px-cw/2)),y:Math.max(0,Math.min(VH-ch,py-ch/2)),w:cw,h:ch}}
+    pose.reset();
+    var P=await runCrop(pose,v,c);
+    if(!P)continue;
+    var b=lmBox(P,VW,VH),mx=b.w*0.15,my=b.h*0.1;
+    if(px>=b.x-mx&&px<=b.x+b.w+mx&&py>=b.y-my&&py<=b.y+b.h+my)return b;
+  }
+  return null;
+}
+function makePreview(key,v,file,full){
+  var sc0=Math.min(1,480/Math.max(v.videoWidth,v.videoHeight));
+  var pv={video:v,demo:false,preview:true,w:Math.round(v.videoWidth*sc0),h:Math.round(v.videoHeight*sc0),duration:full,step:0.1,samples:[],t:0,t0:0,name:file.name,file:file,full:full,range:null};
+  pv.manual=Object.assign({},slots[key].manual);finalize(pv);slots[key]=pv;return pv;
+}
+async function analyze(key,file,range,whole,pick){
+  var my=++busy;playing=false;pickMode=false;
   var v=document.createElement("video");
   v.muted=true;v.playsInline=true;v.preload="auto";v.src=URL.createObjectURL(file);
   $("prog").hidden=false;$("prog").value=0;
@@ -657,8 +703,7 @@ async function analyze(key,file,range,whole){
     try{await v.play();v.pause()}catch(e){}
     var full=v.duration,sc0=Math.min(1,480/Math.max(v.videoWidth,v.videoHeight));
     if(!range&&!whole&&full>LONG){
-      var pv={video:v,demo:false,preview:true,w:Math.round(v.videoWidth*sc0),h:Math.round(v.videoHeight*sc0),duration:full,step:0.1,samples:[],t:0,t0:0,name:file.name,file:file,full:full,range:null};
-      pv.manual=Object.assign({},slots[key].manual);finalize(pv);slots[key]=pv;v.currentTime=0;
+      makePreview(key,v,file,full);v.currentTime=0;
       setStatus("Відео триває "+mmss(full)+". Перемотайте до потрібного місця, задайте початок і кінець нижче та натисніть «Аналізувати відрізок». Щоб обробити все, натисніть «Усе відео».");
       return;
     }
@@ -672,21 +717,38 @@ async function analyze(key,file,range,whole){
     var w=Math.round(v.videoWidth*sc),h=Math.round(v.videoHeight*sc);
     var off=document.createElement("canvas");off.width=w;off.height=h;
     var octx=off.getContext("2d"),samples=[];
+    var VW=v.videoWidth,VH=v.videoHeight,lastBox=pick?pick.box:null,crop=pick?grow(pick.box,0.35,VW,VH):null,miss=0;
     for(var t=0;t<dur;t+=step){
       if(my!==busy)return;
       v.currentTime=t0+Math.min(t,dur-0.01);
       await once(v,"seeked",3000);
-      octx.drawImage(v,0,0,w,h);
-      lastRes=null;
-      await pose.send({image:off});
-      var lm=lastRes&&lastRes.poseLandmarks,P=null;
-      if(lm&&lm.length>=29){P=lm.map(function(p){return [p.x*w,p.y*h,p.visibility==null?1:p.visibility]})}
+      var P=null;
+      if(pick){
+        var Pv=await runCrop(pose,v,crop);
+        if(Pv){
+          var bx=lmBox(Pv,VW,VH),lim=0.7*Math.max(lastBox.h,bx.h,lastBox.w,bx.w)*(1+miss*0.3);
+          if(Math.hypot(bx.x+bx.w/2-lastBox.x-lastBox.w/2,bx.y+bx.h/2-lastBox.y-lastBox.h/2)>lim)Pv=null;
+          else{
+            lastBox=bx;miss=0;
+            var want=grow(bx,0.35,VW,VH);
+            if(!inside(grow(bx,0.12,VW,VH),crop)||crop.w*crop.h>2.5*want.w*want.h){crop=want;pose.reset()}
+            P=Pv.map(function(q){return [q[0]*w/VW,q[1]*h/VH,q[2]]});
+          }
+        }
+        if(!Pv){miss++;if(miss===8){crop=grow(lastBox,0.8,VW,VH);pose.reset()}}
+      }else{
+        octx.drawImage(v,0,0,w,h);
+        lastRes=null;
+        await pose.send({image:off});
+        var lm=lastRes&&lastRes.poseLandmarks;
+        if(lm&&lm.length>=29){P=lm.map(function(p){return [p.x*w,p.y*h,p.visibility==null?1:p.visibility]})}
+      }
       samples.push({lm:P,a:P?angles(P):null});
       $("prog").value=t/dur;
       setStatus("Аналізую кадри: "+Math.round(t/dur*100)+"%");
     }
     smooth(samples);
-    var slot={video:v,demo:false,w:w,h:h,duration:dur,step:step,samples:samples,t:0,t0:t0,file:file,full:full,range:range?[t0,t1]:null,name:file.name+(range?" ("+mmss(t0)+"–"+mmss(t1)+")":"")};
+    var slot={video:v,demo:false,w:w,h:h,duration:dur,step:step,samples:samples,t:0,t0:t0,file:file,full:full,range:range?[t0,t1]:null,pick:pick||null,tracked:!!pick,name:file.name+(range?" ("+mmss(t0)+"–"+mmss(t1)+")":"")};
     slot.manual=Object.assign({},slots[key].manual);finalize(slot);
     slots[key]=slot;
     v.currentTime=t0+peakTime(slot);
@@ -796,6 +858,11 @@ function drawView(){
     var z=vsize(list[0]),sc=Math.min(1,720/Math.max(z[0],z[1]));W=Math.round(z[0]*sc);H=Math.round(z[1]*sc);
     if(cv.width!==W||cv.height!==H){cv.width=W;cv.height=H}
     drawSlot(ctx,list[0],cur,W,H,false);
+    var ps=list[0];
+    if(ps.pick&&ps.video&&Math.abs(ps.video.currentTime-ps.pick.t)<0.35){
+      var pk=W/ps.video.videoWidth,pb=ps.pick.box;
+      ctx.save();ctx.setLineDash([8,6]);ctx.strokeStyle="#40c8ff";ctx.lineWidth=3;ctx.strokeRect(pb.x*pk,pb.y*pk,pb.w*pk,pb.h*pk);ctx.restore();
+    }
   }else{
     var hw=360,gap=6,hs=list.map(function(sl){var q=vsize(sl);return Math.round(hw*q[1]/q[0])});
     W=hw*2+gap;H=Math.max(hs[0],hs[1]);
@@ -1192,6 +1259,8 @@ function renderAll(){
   var rs=slots[cur];$("rangeBox").hidden=both||!rs.file;
   if(rs.file&&rangeFor!==rs){rangeFor=rs;$("rA").value=rs.range?mmss(rs.range[0]):"";$("rB").value=rs.range?mmss(rs.range[1]):"";
     $("rangeTitle").textContent="Відрізок для аналізу (відео "+mmss(rs.full)+")"}
+  $("pState").textContent=pickMode?"Тицьніть на тулуб потрібної людини на кадрі.":rs.pick?"Обрано людину на кадрі "+mmss(rs.pick.t)+(rs.tracked?". Аналіз виконано для неї.":". Запустіть аналіз."):"Зараз автоматично: найпомітніша людина в кадрі.";
+  $("pClear").hidden=!rs.pick&&!pickMode;$("view").style.cursor=pickMode&&!both?"crosshair":"";
   $("fileLabel").textContent="Обрати відео «"+LABEL[cur]+"»";
   $("demoTag").hidden=!active().some(function(sl){return sl.demo});
   syncPlayBtn();renderSummary();renderReba();renderAdvice();renderBody();renderCycles();renderJoints();renderCmp();renderExposure();renderBoth();$("pdfBtn").textContent=both?"Звіт PDF: до і після":"Звіт PDF: "+LABEL[cur];drawView();drawChart();
@@ -1435,6 +1504,7 @@ function repVariant(R,key,shot,single){
   var cy=sl.cycles;
   R.h3("Цикли");
   R.para(cy&&cy.mean?"Повторів: "+cy.n+". Середній цикл "+fmt(cy.mean,1)+" с, найкращий "+fmt(cy.min,1)+" с, найдовший "+fmt(cy.max,1)+" с. Темп "+fmt(cy.rpm,1)+" повторів за хвилину. Цикли визначено за рухом: "+CYCNAME[cy.key]+".":"Повторюваний рух на відео не знайдено або повторів менше двох.");
+  if(sl.tracked)R.para("Аналізувалась одна людина, обрана вручну на першому кадрі відрізка. Інші люди в кадрі не враховані.");
   if(sl.move)R.para("Переміщення в площині кадру: приблизно "+fmt(sl.move.dist,1)+" м за запис, "+fmt(sl.move.pct)+"% часу в русі.");
   if(single){
     var ex=exposure(sl),io=expInputs();
@@ -1624,7 +1694,14 @@ $("pdfBtn").addEventListener("click",function(){
 function absNow(){var sl=slots[cur];return now(sl)+(sl.t0||0)}
 $("rASet").addEventListener("click",function(){pauseAll();syncPlayBtn();$("rA").value=mmss(absNow())});
 $("rBSet").addEventListener("click",function(){pauseAll();syncPlayBtn();$("rB").value=mmss(absNow())});
-$("rAll").addEventListener("click",function(){var sl=slots[cur];if(!sl.file)return;pauseAll();$("rA").value="";$("rB").value="";rangeFor=null;analyze(cur,sl.file,null,true)});
+function pickOk(sl,a){
+  if(sl.pick&&Math.abs(sl.pick.t-a)>0.35){setStatus("Людину обрано на кадрі "+mmss(sl.pick.t)+", а аналіз починається з "+mmss(a)+". Натисніть «Обрати людину» ще раз або «Скинути вибір».",true);return false}
+  return true;
+}
+$("rAll").addEventListener("click",function(){
+  var sl=slots[cur];if(!sl.file||!pickOk(sl,0))return;
+  pauseAll();$("rA").value="";$("rB").value="";rangeFor=null;analyze(cur,sl.file,null,true,sl.pick);
+});
 $("rGo").addEventListener("click",function(){
   var sl=slots[cur];if(!sl.file)return;
   var a=parseT($("rA").value),b=parseT($("rB").value);
@@ -1633,7 +1710,38 @@ $("rGo").addEventListener("click",function(){
   b=Math.min(b,sl.full);
   if(a>=sl.full){setStatus("Початок "+mmss(a)+" виходить за межі відео ("+mmss(sl.full)+").",true);return}
   if(b-a<2){setStatus("Відрізок закороткий або кінець раніше за початок. Формат: хв:с, наприклад з 2:00 по 3:00.",true);return}
-  pauseAll();rangeFor=null;analyze(cur,sl.file,[a,b],false);
+  if(!pickOk(sl,a))return;
+  pauseAll();rangeFor=null;analyze(cur,sl.file,[a,b],false,sl.pick);
+});
+$("pPick").addEventListener("click",function(){
+  var sl=slots[cur];if(!sl.file||!$("prog").hidden)return;
+  var a=parseT($("rA").value);
+  if(a!==a){setStatus("Не вдалося прочитати час початку. Формат: хв:с, наприклад 2:00.",true);return}
+  if(a==null)a=0;a=Math.max(0,Math.min(a,sl.full-0.5));
+  pauseAll();syncPlayBtn();
+  var pv=makePreview(cur,sl.video,sl.file,sl.full);pv.range=sl.range;rangeFor=pv;
+  sl.video.currentTime=a;pickMode=true;pickT=a;
+  setStatus("Тицьніть на тулуб потрібної людини на кадрі "+mmss(a)+".");renderAll();
+  document.querySelector(".stage").scrollIntoView({block:"center"});
+});
+$("pClear").addEventListener("click",function(){
+  var sl=slots[cur];pickMode=false;var had=sl.tracked;sl.pick=null;
+  setStatus(had?"Вибір скинуто. Запустіть аналіз ще раз, щоб перерахувати для найпомітнішої людини.":"Вибір скинуто.");renderAll();
+});
+$("view").addEventListener("click",async function(e){
+  if(!pickMode||both)return;
+  var sl=slots[cur],v=sl.video;if(!v)return;
+  var r=$("view").getBoundingClientRect(),px=(e.clientX-r.left)/r.width*v.videoWidth,py=(e.clientY-r.top)/r.height*v.videoHeight;
+  pickMode=false;setStatus("Шукаю людину в цій точці. Перший раз це довше, бо завантажується модель.");
+  try{
+    var pose=await ensurePose();
+    await seekTo(v,pickT);
+    var box=await probe(pose,v,px,py);
+    if(slots[cur]!==sl)return;
+    if(!box){pickMode=true;setStatus("Не знайшов людину в цій точці. Тицьніть на тулуб ще раз.",true);renderAll();return}
+    sl.pick={box:box,t:pickT};
+    setStatus("Людину обрано, вона в рамці. Тепер натисніть «Аналізувати відрізок» або «Усе відео».");renderAll();
+  }catch(err){setStatus("Не вдалося обрати людину: "+(err&&err.message||err),true);renderAll()}
 });
 $("csvBtn").addEventListener("click",function(){saveFile("reba-data-"+dIso()+".csv",new Blob([csvData()],{type:"text/csv"}),$("outStatus"))});
 $("trail").addEventListener("change",function(e){trailOn=e.target.checked;["before","after"].forEach(function(k){slots[k].shot=null})});
