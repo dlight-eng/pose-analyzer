@@ -1,0 +1,1562 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Аналізатор робочої пози</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1f5fbf">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+/* Layout: one column tool. Stage (video + skeleton) first, then summary, chart, joint table, comparison. */
+:root{
+  --bg:#f3f5f7; --panel:#ffffff; --ink:#18212b; --muted:#5b6876; --line:#d6dce3;
+  --accent:#1f5fbf; --accent-ink:#ffffff;
+  --ok:#1f9d5b; --warn:#c98a00; --bad:#d23b40;
+  --ok-soft:#dff3e7; --warn-soft:#fbefcc; --bad-soft:#fbdfe0;
+  --stage:#10161d;
+  --display:"IBM Plex Sans Condensed","Arial Narrow",Arial,sans-serif;
+  --body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#11161c; --panel:#1a212a; --ink:#e8edf2; --muted:#9aa7b4; --line:#2e3944;
+    --accent:#6ea8ff; --accent-ink:#0b1420;
+    --ok:#3fcf82; --warn:#f0b93a; --bad:#ff6b70;
+    --ok-soft:#173526; --warn-soft:#3a3013; --bad-soft:#3f1d1f;
+    --stage:#070a0e;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#11161c; --panel:#1a212a; --ink:#e8edf2; --muted:#9aa7b4; --line:#2e3944;
+  --accent:#6ea8ff; --accent-ink:#0b1420;
+  --ok:#3fcf82; --warn:#f0b93a; --bad:#ff6b70;
+  --ok-soft:#173526; --warn-soft:#3a3013; --bad-soft:#3f1d1f;
+  --stage:#070a0e;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.45}
+main{max-width:760px;margin:0 auto;padding:20px 16px 48px;display:flex;flex-direction:column;gap:16px}
+h1{font-family:var(--display);font-size:28px;line-height:1.1;margin:0;text-wrap:balance}
+h2{font-family:var(--display);font-size:19px;margin:0;text-wrap:balance}
+p{margin:0}
+.lede{color:var(--muted);font-size:15px;max-width:60ch}
+header{display:flex;flex-direction:column;gap:6px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:12px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.spread{justify-content:space-between}
+button,.filebtn{font:inherit;font-weight:500;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:9px 14px;cursor:pointer;min-height:42px}
+button:focus-visible,.filebtn:focus-within,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.filebtn{display:inline-flex;align-items:center;position:relative;overflow:hidden}
+.filebtn input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;border-radius:0;background:transparent;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.tag{font-size:12px;font-weight:600;padding:3px 8px;border-radius:999px;background:var(--warn-soft);color:var(--ink);border:1px solid var(--line)}
+.stage{background:var(--stage);border-radius:8px;display:flex;justify-content:center;overflow:hidden}
+#view{display:block;max-width:100%;max-height:540px;width:auto;height:auto}
+input[type=file]{font:inherit;font-size:13px;color:var(--ink);max-width:100%}
+input[type=range]{flex:1;min-width:120px;accent-color:var(--accent)}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.small{font-size:13px;color:var(--muted)}
+#status{font-size:14px}
+#status.err{color:var(--bad)}
+progress{width:100%;height:8px;accent-color:var(--accent)}
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.tile{border:1px solid var(--line);border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:2px;border-left-width:5px}
+.tile b{font-family:var(--mono);font-size:24px;font-weight:500;font-variant-numeric:tabular-nums}
+.tile span{font-size:12px;color:var(--muted)}
+.z0{border-left-color:var(--ok)}.z1{border-left-color:var(--warn)}.z2{border-left-color:var(--bad)}
+.bar{display:flex;height:16px;border-radius:4px;overflow:hidden;background:var(--line)}
+.bar i{display:block;height:100%}
+.bar .g{background:var(--ok)}.bar .y{background:var(--warn)}.bar .r{background:var(--bad)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--muted)}
+.dot{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{padding:6px 12px;min-height:36px;font-size:14px}
+.chips button[aria-pressed="true"]{background:var(--ink);color:var(--panel);border-color:var(--ink)}
+#chart{width:100%;height:180px;display:block}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:8px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{font-weight:600;color:var(--muted);font-size:12px}
+td.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+td .bar{width:64px;height:10px;margin-left:auto}
+.pill{display:inline-block;padding:1px 8px;border-radius:999px;font-family:var(--mono);font-size:13px}
+.p0{background:var(--ok-soft)}.p1{background:var(--warn-soft)}.p2{background:var(--bad-soft)}
+.better{color:var(--ok);font-weight:600}.worse{color:var(--bad);font-weight:600}
+.score{font-family:var(--mono);font-size:40px;font-weight:500;line-height:1;min-width:76px;text-align:center;padding:12px 10px;border-radius:10px;font-variant-numeric:tabular-nums}
+.col{display:flex;flex-direction:column;gap:4px;flex:1;min-width:180px}
+.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px 16px}
+.form label.f{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)}
+.form select{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px;min-height:42px}
+.checks{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px 16px;font-size:14px}
+.checks label{display:flex;gap:8px;align-items:flex-start}
+.checks input{width:18px;height:18px;margin-top:2px;accent-color:var(--accent)}
+tr.sub td{font-weight:600;border-bottom-width:2px}
+tr.total td{font-weight:600;font-size:16px;border-bottom:0}
+.items{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.items li{display:flex;gap:10px;align-items:flex-start;font-size:15px;max-width:68ch}
+.items .pill{flex:none;font-family:var(--body);font-size:12px;font-weight:600;min-width:74px;text-align:center;padding:3px 8px;margin-top:1px}
+.items .n{flex:none;font-family:var(--mono);font-size:13px;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:1px solid var(--line)}
+.kind{font-size:12px;color:var(--muted);display:block}
+main>header,main>section:first-of-type{order:-3}
+main.both .per{display:none}
+main.both #cmpSec{order:-2}
+.onlyboth{display:none}
+main.both .onlyboth{display:flex;order:-1}
+.concl{display:flex;flex-direction:column;gap:12px;padding-top:12px;border-top:1px solid var(--line)}
+.concl h3{font-family:var(--display);font-size:16px;margin:0}
+.verdict{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.verdict .arrow{font-size:26px;color:var(--muted)}
+ul.notes{margin:0;padding-left:18px;color:var(--muted);font-size:14px;display:flex;flex-direction:column;gap:6px;max-width:65ch}
+@media (max-width:420px){.tiles{grid-template-columns:1fr 1fr}.tiles .tile:last-child{grid-column:1/-1}h1{font-size:24px}}
+main.both #expSec{order:-2}
+main.both #outSec{order:-1}
+.form input[type=number]{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px;min-height:42px;width:100%}
+#expTbl td:first-child{white-space:normal;min-width:150px}
+#recVideo{display:block;max-width:100%;max-height:320px;border-radius:8px;background:var(--stage)}
+.tiles4{grid-template-columns:repeat(4,1fr)}
+@media (max-width:420px){.tiles4{grid-template-columns:1fr 1fr}.tiles4 .tile:last-child{grid-column:auto}}
+.bodywrap{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.bodywrap canvas{flex:none;display:block}
+.fig{margin:0;display:flex;flex-direction:column;align-items:center;gap:4px;font-size:13px;color:var(--muted)}
+.bodylist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;flex:1;min-width:190px;font-size:14px}
+.bodylist li{display:flex;gap:2px;align-items:flex-start}
+.bodylist small{display:block;color:var(--muted);font-size:12px}
+.sw{display:inline-block;flex:none;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.bodylist .sw{margin-top:4px}
+.cyc{display:flex;align-items:flex-end;gap:3px;height:72px}
+.cyc i{display:block;flex:1;max-width:28px;min-height:3px;background:var(--accent);border-radius:3px 3px 0 0;opacity:.5}
+.cyc i.best{opacity:1}
+.hint{display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:var(--warn-soft);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:14px}
+.check{display:inline-flex;gap:8px;align-items:center;font-size:14px}
+.check input{width:18px;height:18px;accent-color:var(--accent)}
+input[type=text]{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-height:42px;flex:1;min-width:180px}
+#cardImg{display:block;max-width:100%;height:auto;border:1px solid var(--line);border-radius:8px}
+@media (prefers-reduced-motion: reduce){*{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+<main>
+<header>
+  <h1>Аналізатор робочої пози</h1>
+  <p class="lede">Завантажте відео операції, зняте збоку. Сторінка знайде скелет, порахує кути тулуба, шиї, плеча й коліна та покаже, скільки часу працівник проводить у кожній зоні ризику. Відео обробляється у вашому браузері й нікуди не передається.</p>
+</header>
+
+<section class="panel" aria-label="Відео">
+  <div class="row spread">
+    <div class="seg" role="group" aria-label="Варіант">
+      <button id="tab-before" type="button" aria-pressed="true">До</button>
+      <button id="tab-after" type="button" aria-pressed="false">Після</button>
+      <button id="tab-both" type="button" aria-pressed="false">Порівняння</button>
+    </div>
+    <span id="demoTag" class="tag">Приклад, не реальне відео</span>
+    <button id="pick" type="button" class="primary"><span id="fileLabel">Обрати відео «До»</span></button>
+    <button id="shoot" type="button">Зняти відео</button><input id="cam" type="file" accept="video/*" capture="environment" hidden>
+  </div>
+  <div class="stage"><canvas id="view" width="360" height="560" aria-label="Кадр зі скелетом"></canvas></div>
+  <div class="row">
+    <button id="play" type="button" aria-label="Відтворити">▶</button>
+    <input id="seek" type="range" min="0" max="1000" value="0" aria-label="Позиція у відео">
+    <span id="time" class="mono small">0.0 / 0.0 с</span>
+  </div>
+  <div class="row small" id="fileRow"><label for="file">Якщо кнопка не відкриває галерею, оберіть файл тут:</label><input id="file" type="file"></div>
+  <label class="check" for="blur"><input id="blur" type="checkbox" checked>Приховувати обличчя на відео та в картці</label>
+  <progress id="prog" max="1" value="0" hidden></progress>
+  <p id="status" class="small" role="status"></p>
+</section>
+
+<section class="panel per" aria-label="Підсумок">
+  <div class="row spread"><h2 id="sumTitle">Тулуб за цикл</h2><span id="sumMeta" class="small"></span></div>
+  <div class="tiles">
+    <div class="tile" id="tPeak"><b>–</b><span>пік, °</span></div>
+    <div class="tile" id="tAvg"><b>–</b><span>середній, °</span></div>
+    <div class="tile z2" id="tRed"><b>–</b><span>у червоній зоні, с</span></div>
+  </div>
+  <div class="bar" id="zoneBar" aria-hidden="true"></div>
+  <div class="legend" id="zoneLegend"></div>
+</section>
+
+<section class="panel per" aria-label="REBA">
+  <div class="row spread"><h2 id="rebaTitle">Висновок за REBA</h2><button id="rebaJump" type="button">Показати цей кадр</button></div>
+  <div class="row">
+    <div id="rebaScore" class="score p0">–</div>
+    <div class="col"><b id="rebaLevel"></b><p id="rebaText" class="small"></p></div>
+  </div>
+  <p id="rebaDrivers" class="small"></p>
+  <div class="scroll"><table id="rebaTbl"></table></div>
+  <div class="bar" id="rebaBar" aria-hidden="true"></div>
+  <div class="legend" id="rebaLegend"></div>
+  <h2>Чого не видно на відео</h2>
+  <p class="small">Ці дані вводяться вручну окремо для «До» і «Після». Бал перераховується одразу.</p>
+  <div class="form">
+    <label class="f" for="m-load">Вага вантажу<select id="m-load"><option value="0">до 5 кг</option><option value="1">5–10 кг</option><option value="2">понад 10 кг</option></select></label>
+    <label class="f" for="m-coupling">Захват<select id="m-coupling"><option value="0">добрий: зручні ручки</option><option value="1">задовільний</option><option value="2">поганий</option><option value="3">неприйнятний</option></select></label>
+    <label class="f" for="m-wrist">Зап'ястя<select id="m-wrist"><option value="1">згин до 15°</option><option value="2">згин понад 15°</option></select></label>
+  </div>
+  <div class="checks">
+    <label for="m-shock"><input id="m-shock" type="checkbox">Ривок або різке зусилля (+1)</label>
+    <label for="m-wristTwist"><input id="m-wristTwist" type="checkbox">Зап'ястя скручене або відхилене вбік (+1)</label>
+    <label for="m-trunkTwist"><input id="m-trunkTwist" type="checkbox">Тулуб скручений або нахилений убік (+1)</label>
+    <label for="m-neckTwist"><input id="m-neckTwist" type="checkbox">Шия скручена або нахилена вбік (+1)</label>
+    <label for="m-oneLeg"><input id="m-oneLeg" type="checkbox">Опора на одну ногу або нестійка поза (+1)</label>
+    <label for="m-abduct"><input id="m-abduct" type="checkbox">Плече відведене вбік або ротоване (+1)</label>
+    <label for="m-shoulderUp"><input id="m-shoulderUp" type="checkbox">Плече підняте (+1)</label>
+    <label for="m-armSupport"><input id="m-armSupport" type="checkbox">Рука має опору або поза за силою тяжіння (−1)</label>
+    <label for="m-static"><input id="m-static" type="checkbox">Статична поза довше 1 хв (+1)</label>
+    <label for="m-repeat"><input id="m-repeat" type="checkbox">Повтори частіше 4 разів на хв (+1)</label>
+    <label for="m-rapid"><input id="m-rapid" type="checkbox">Різкі зміни пози або нестійка основа (+1)</label>
+  </div>
+</section>
+
+<section class="panel per" aria-label="Ризики та рекомендації">
+  <h2 id="advTitle">Ризики</h2>
+  <ul class="items" id="risks"></ul>
+  <h2>Рекомендації</h2>
+  <ol class="items" id="recs"></ol>
+  <p class="small">Список формується за правилами з кутів, часу в зонах і даних форми. Це скринінг: остаточне рішення приймайте після огляду робочого місця.</p>
+</section>
+
+<section class="panel per" aria-label="Карта навантаження">
+  <div class="row spread"><h2 id="bodyTitle">Карта навантаження</h2><span class="small">індекс 0–100</span></div>
+  <div class="bodywrap"><canvas id="body" aria-label="Силует із зонами навантаження"></canvas><ul class="bodylist" id="bodyList"></ul></div>
+</section>
+
+<section class="panel per" aria-label="Цикли">
+  <div class="row spread"><h2 id="cycTitle">Цикли та хронометраж</h2><span id="cycMeta" class="small"></span></div>
+  <div class="tiles tiles4">
+    <div class="tile" id="cN"><b>–</b><span>повторів</span></div>
+    <div class="tile" id="cMean"><b>–</b><span>середній цикл, с</span></div>
+    <div class="tile" id="cBest"><b>–</b><span>найкращий, с</span></div>
+    <div class="tile" id="cRpm"><b>–</b><span>повторів за хв</span></div>
+  </div>
+  <div class="cyc" id="cycBars" aria-hidden="true"></div>
+  <p id="cycNote" class="small"></p>
+  <div class="hint" id="cycHint" hidden><span id="cycHintText"></span><button id="cycApply" type="button">Позначити у формі REBA</button></div>
+</section>
+
+<section class="panel per" aria-label="Графік">
+  <div class="row spread"><h2>Кут у часі</h2>
+    <div class="chips" id="chips" role="group" aria-label="Суглоб"></div>
+  </div>
+  <canvas id="chart" width="720" height="360"></canvas>
+  <p class="small">Пунктирні лінії позначають початок кожного повтору.</p>
+</section>
+
+<section class="panel per" aria-label="Суглоби">
+  <h2>Усі кути</h2>
+  <div class="scroll"><table id="joints"></table></div>
+</section>
+
+<section class="panel" id="cmpSec" aria-label="Порівняння">
+  <div class="row spread"><h2>До і після</h2><button id="copy" type="button">Копіювати підсумок</button></div>
+  <div class="verdict" id="cmpVerdict"></div>
+  <ul class="items" id="cmpRisks"></ul>
+  <div class="scroll"><table id="cmp"></table></div>
+  <p id="cmpNote" class="small"></p>
+</section>
+
+<section class="panel" id="expSec" aria-label="Навантаження за зміну і рік">
+  <h2>Навантаження за зміну і рік</h2>
+  <div class="form">
+    <label class="f" for="expHours">Годин на цій операції за зміну<input id="expHours" type="number" min="0" max="24" step="0.5" value="6" inputmode="decimal"></label>
+    <label class="f" for="expShifts">Змін на рік<input id="expShifts" type="number" min="0" max="366" step="1" value="250" inputmode="numeric"></label>
+  </div>
+  <div class="scroll"><table id="expTbl"></table></div>
+  <p class="small">Розрахунок припускає, що відео показує типовий цикл і операція триває вказаний час без перерв.</p>
+</section>
+
+<section class="panel onlyboth" aria-label="Карта навантаження до і після">
+  <div class="row spread"><h2>Карта навантаження: до і після</h2><span class="small">індекс 0–100</span></div>
+  <div class="bodywrap" style="justify-content:space-around">
+    <figure class="fig"><canvas id="bodyB" aria-label="Силует до змін"></canvas><figcaption>До</figcaption></figure>
+    <figure class="fig"><canvas id="bodyA" aria-label="Силует після змін"></canvas><figcaption>Після</figcaption></figure>
+  </div>
+  <div class="scroll"><table id="bodyTbl"></table></div>
+</section>
+
+<section class="panel onlyboth" aria-label="Висновки до і після">
+  <h2>Висновок за REBA: до і після</h2>
+  <div class="scroll"><table id="bothTbl"></table></div>
+  <div id="bothConcl" style="display:flex;flex-direction:column;gap:16px"></div>
+  <p class="small">Щоб змінити вагу, захват чи інші дані форми, перейдіть на вкладку «До» або «Після».</p>
+</section>
+
+<section class="panel" id="outSec" aria-label="Звіт і відео">
+  <h2>Звіт і відео</h2>
+  <div class="row"><input id="opName" type="text" maxlength="80" placeholder="Назва операції, наприклад: укладання коробок на палету" aria-label="Назва операції"></div>
+  <div class="row"><button id="pdfBtn" type="button" class="primary">Звіт PDF</button><button id="recBtn" type="button">Записати відео зі скелетом</button></div>
+  <p id="outStatus" class="small" role="status"></p>
+  <div id="recOut" hidden style="display:flex;flex-direction:column;gap:10px">
+    <video id="recVideo" controls playsinline muted></video>
+    <div class="row"><button id="recSave" type="button">Зберегти відео</button></div>
+  </div>
+  <p class="small">Звіт містить поточну вкладку: «До», «Після» або обидва варіанти з порівнянням. Сторінки звіту зберігаються як зображення, тому текст у PDF не виділяється. Відео записується з кадру вище в реальному часі.</p>
+</section>
+
+<section class="panel onlyboth" aria-label="Картка до і після">
+  <h2>Картка «до/після»</h2>
+  <p class="small">Одне зображення для звіту чи дошки кайдзен: кадри найгірших поз, бали REBA, карта навантаження і підсумок змін.</p>
+  <div class="row"><button id="cardMake" type="button">Оновити картку</button><span class="small">Назва операції береться з блоку «Звіт і відео».</span></div>
+  <img id="cardImg" alt="Картка порівняння до і після" width="1600" height="1070">
+  <div class="row"><button id="cardSave" type="button" class="primary">Зберегти PNG</button><span id="cardStatus" class="small" role="status"></span></div>
+  <p class="small">На телефоні картку також можна зберегти, якщо утримувати палець на зображенні.</p>
+</section>
+
+<section class="panel" aria-label="Метод">
+  <h2>Як рахується</h2>
+  <ul class="notes">
+    <li>Тулуб: кут між лінією «стегна → плечі» і вертикаллю. Зони за REBA: до 20° зелена, 20–60° жовта, понад 60° червона.</li>
+    <li>Шия: кут між лінією «плечі → вуха» і тулубом. До 20° зелена, 20–45° жовта, далі червона.</li>
+    <li>Плече: кут між плечовою кісткою і тулубом. До 45° зелена, 45–90° жовта, понад 90° червона.</li>
+    <li>Коліно: згин відносно прямої ноги. До 30° зелена, 30–60° жовта, далі червона.</li>
+    <li>REBA рахується для кожного кадру за стандартними таблицями A, B і C. Висновок робиться за найгіршою позою циклу. Передпліччя оцінюється за кутом у лікті: 60–100° дає 1 бал, інакше 2.</li>
+    <li>Цикли визначаються автоматично за суглобом із найбільшою амплітудою руху. Повтор починається, коли кут перетинає 60% амплітуди знизу вгору.</li>
+    <li>Індекс навантаження на карті тіла: половина частки часу в жовтій зоні плюс частка часу в червоній, у відсотках. До 15 низьке, 15–40 помірне, від 40 високе. Це власний показник інструмента, а не стандартна методика.</li>
+    <li>Обличчя приховується за точками голови. На кадрах, де людину не розпізнано, воно лишається відкритим.</li>
+    <li>Знімайте збоку, перпендикулярно до руху, щоб людина була в кадрі на повний зріст. Це 2D-оцінка: скручування тулуба і вагу вантажу вона не бачить, тому ці пункти позначте у формі під висновком REBA.</li>
+  </ul>
+</section>
+</main>
+
+<script src="mp/pose.js"></script>
+<script>
+(function(){
+"use strict";
+var $=function(id){return document.getElementById(id)};
+var J={reba:{name:"REBA",z:[3,7]},trunk:{name:"Тулуб",z:[20,60]},neck:{name:"Шия",z:[20,45]},arm:{name:"Плече",z:[45,90]},knee:{name:"Коліно",z:[30,60]}};
+var KEYS=["trunk","neck","arm","knee"];
+var COL=["#2fbf71","#f2c230","#ef4a50"];
+var LABEL={before:"До",after:"Після"};
+function zone(k,a){if(a==null)return -1;var z=J[k].z;return a<=z[0]?0:a<=z[1]?1:2}
+function css(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim()}
+
+/* ---------- geometry ---------- */
+function ang(ax,ay,bx,by){var d=(ax*bx+ay*by)/((Math.hypot(ax,ay)*Math.hypot(bx,by))||1);return Math.acos(Math.max(-1,Math.min(1,d)))*180/Math.PI}
+function side(P){var l=P[11][2]+P[13][2]+P[23][2]+P[25][2]+P[27][2],r=P[12][2]+P[14][2]+P[24][2]+P[26][2]+P[28][2];return l>=r?[11,13,15,23,25,27]:[12,14,16,24,26,28]}
+function mid(P,a,b){return [(P[a][0]+P[b][0])/2,(P[a][1]+P[b][1])/2]}
+function angles(P){
+  var S=side(P);
+  if(Math.min(P[S[0]][2],P[S[3]][2])<0.4)return null;
+  var sh=mid(P,11,12),hp=mid(P,23,24),ear=mid(P,7,8);
+  var tx=sh[0]-hp[0],ty=sh[1]-hp[1];
+  var s=P[S[0]],e=P[S[1]],w=P[S[2]],h=P[S[3]],k=P[S[4]],a=P[S[5]];
+  return {
+    elbow:(e[2]>0.3&&w[2]>0.3)?180-ang(s[0]-e[0],s[1]-e[1],w[0]-e[0],w[1]-e[1]):null,
+    trunk:ang(tx,ty,0,-1),
+    neck:ang(ear[0]-sh[0],ear[1]-sh[1],tx,ty),
+    arm:e[2]>0.3?ang(e[0]-s[0],e[1]-s[1],h[0]-s[0],h[1]-s[1]):null,
+    knee:(k[2]>0.3&&a[2]>0.3)?180-ang(h[0]-k[0],h[1]-k[1],a[0]-k[0],a[1]-k[1]):null
+  };
+}
+function smooth(samples){
+  KEYS.concat(["elbow"]).forEach(function(k){
+    var raw=samples.map(function(s){return s.a?s.a[k]:null});
+    samples.forEach(function(s,i){
+      if(!s.a||raw[i]==null)return;
+      var sum=0,n=0;for(var j=i-1;j<=i+1;j++){if(raw[j]!=null){sum+=raw[j];n++}}
+      s.a[k]=sum/n;
+    });
+  });
+}
+function stats(slot){
+  var out={},n=slot.samples.length,valid=0;
+  slot.samples.forEach(function(s){if(s.a)valid++});
+  KEYS.forEach(function(k){
+    var c=[0,0,0],sum=0,m=0,peak=0;
+    slot.samples.forEach(function(s){
+      var v=s.a?s.a[k]:null;if(v==null)return;
+      c[zone(k,v)]++;sum+=v;m++;if(v>peak)peak=v;
+    });
+    out[k]=m?{avg:sum/m,peak:peak,pct:c.map(function(x){return x/m*100}),sec:c.map(function(x){return x*slot.step}),n:m}:null;
+  });
+  out.coverage=n?valid/n:0;
+  return out;
+}
+
+/* ---------- cycles ---------- */
+function pctl(v,p){var a=v.slice().sort(function(x,y){return x-y});return a[Math.round(p*(a.length-1))]}
+function detectCycles(slot){
+  var best=null;
+  ["trunk","arm","knee"].forEach(function(k){
+    var v=[];slot.samples.forEach(function(q){if(q.a&&q.a[k]!=null)v.push(q.a[k])});
+    if(v.length<10)return;
+    var lo=pctl(v,0.05),hi=pctl(v,0.95);
+    var cand={k:k,lo:lo,r:hi-lo};
+    if(!best||cand.r>best.r/(best.k==="trunk"?0.75:1))best=cand;
+  });
+  var o={key:best?best.k:null,starts:[],durs:[],n:0};
+  if(!best||best.r<15)return o;
+  var k=best.k,up=best.lo+0.6*best.r,dn=best.lo+0.4*best.r,state=0,n=slot.samples.length,i,j;
+  for(i=0;i<n;i++){
+    var sum=0,c=0;
+    for(j=i-2;j<=i+2;j++){var q=slot.samples[j];if(q&&q.a&&q.a[k]!=null){sum+=q.a[k];c++}}
+    if(!c)continue;
+    var v=sum/c,t=i*slot.step;
+    if(v<dn)state=-1;
+    else if(v>up){if(state===-1&&(!o.starts.length||t-o.starts[o.starts.length-1]>=0.5))o.starts.push(t);state=1}
+  }
+  for(i=1;i<o.starts.length;i++)o.durs.push(o.starts[i]-o.starts[i-1]);
+  o.n=o.starts.length;
+  if(o.durs.length){
+    var m=o.durs.reduce(function(a,b){return a+b},0)/o.durs.length;
+    o.mean=m;o.min=Math.min.apply(null,o.durs);o.max=Math.max.apply(null,o.durs);o.rpm=60/m;
+    o.cv=o.durs.length>1?Math.sqrt(o.durs.reduce(function(a,b){return a+(b-m)*(b-m)},0)/(o.durs.length-1))/m*100:null;
+  }
+  return o;
+}
+
+/* ---------- load index and body map ---------- */
+function loadIdx(st){return st?0.5*st.pct[1]+st.pct[2]:null}
+function heat(idx){
+  if(idx==null)return null;
+  var t=Math.min(1,idx/50),a=[47,191,113],b=[242,194,48],c=[239,74,80],p,q,u;
+  if(t<0.5){p=a;q=b;u=t*2}else{p=b;q=c;u=(t-0.5)*2}
+  return "rgb("+[0,1,2].map(function(i){return Math.round(p[i]+(q[i]-p[i])*u)}).join(",")+")";
+}
+function idxBand(i){return i<15?"низьке":i<40?"помірне":"високе"}
+function regions(slot){
+  var S=slot.stats,m=slot.manual,w=Math.max(1,Math.min(3,m.wrist+(m.wristTwist?1:0)));
+  return [
+    {id:"neck",name:"Шия",idx:loadIdx(S.neck),st:S.neck},
+    {id:"arm",name:"Плечі",idx:loadIdx(S.arm),st:S.arm},
+    {id:"trunk",name:"Поперек",idx:loadIdx(S.trunk),st:S.trunk},
+    {id:"wrist",name:"Зап'ястя",idx:(w-1)*25,manual:true,w:w},
+    {id:"knee",name:"Коліна",idx:loadIdx(S.knee),st:S.knee}
+  ];
+}
+function rrect(c,x,y,w,h,r){c.beginPath();if(c.roundRect)c.roundRect(x,y,w,h,r);else c.rect(x,y,w,h);c.fill()}
+function drawBody(c,slot,x,y,H,neutral){
+  var u=H/100,cx=x+21*u,R={};
+  regions(slot).forEach(function(r){R[r.id]=heat(r.idx)||neutral});
+  var Y=function(v){return y+v*u},circ=function(px,py,r){c.beginPath();c.arc(px,py,r,0,6.3);c.fill()};
+  c.fillStyle=neutral;circ(cx,Y(8),6.5*u);
+  c.fillStyle=R.neck;rrect(c,cx-2.6*u,Y(13.5),5.2*u,6.5*u,1.5*u);
+  c.fillStyle=neutral;rrect(c,cx-10.5*u,Y(19),21*u,17.5*u,4*u);
+  c.fillStyle=R.trunk;rrect(c,cx-10*u,Y(35),20*u,14*u,3*u);
+  c.fillStyle=neutral;rrect(c,cx-10.5*u,Y(50),21*u,8*u,3*u);
+  [-1,1].forEach(function(g){
+    c.fillStyle=R.arm;rrect(c,cx+g*14.4*u-3.2*u,Y(19.5),6.4*u,20*u,3.2*u);
+    c.fillStyle=neutral;rrect(c,cx+g*15.2*u-2.7*u,Y(40.5),5.4*u,17*u,2.7*u);
+    c.fillStyle=R.wrist;circ(cx+g*15.2*u,Y(61),3.4*u);
+    c.fillStyle=neutral;rrect(c,cx+g*5.5*u-4.4*u,Y(59),8.8*u,17*u,4*u);
+    c.fillStyle=R.knee;circ(cx+g*5.5*u,Y(78.5),5*u);
+    c.fillStyle=neutral;rrect(c,cx+g*5.5*u-3.6*u,Y(84),7.2*u,13*u,3.4*u);
+    rrect(c,cx+g*6.5*u-4.2*u,Y(97),8.4*u,3*u,1.5*u);
+  });
+}
+
+/* ---------- REBA ---------- */
+var TA=[[[1,2,3,4],[1,2,3,4],[3,3,5,6]],[[2,3,4,5],[3,4,5,6],[4,5,6,7]],[[2,4,5,6],[4,5,6,7],[5,6,7,8]],[[3,5,6,7],[5,6,7,8],[6,7,8,9]],[[4,6,7,8],[6,7,8,9],[7,8,9,9]]];
+var TB=[[[1,2,2],[1,2,3]],[[1,2,3],[2,3,4]],[[3,4,5],[4,5,5]],[[4,5,5],[5,6,7]],[[6,7,8],[7,8,8]],[[7,8,8],[8,9,9]]];
+var TC=[[1,1,1,2,3,3,4,5,6,7,7,7],[1,2,2,3,4,4,5,6,6,7,7,8],[2,3,3,3,4,5,6,7,7,8,8,8],[3,4,4,4,5,6,7,8,8,9,9,9],[4,4,4,5,6,7,8,8,9,9,9,9],[6,6,6,7,8,8,9,9,10,10,10,10],[7,7,7,8,9,9,9,10,10,11,11,11],[8,8,8,9,10,10,10,10,10,11,11,11],[9,9,9,10,10,10,11,11,11,12,12,12],[10,10,10,11,11,11,11,12,12,12,12,12],[11,11,11,11,12,12,12,12,12,12,12,12],[12,12,12,12,12,12,12,12,12,12,12,12]];
+var MSEL=["load","coupling","wrist"],MCHK=["shock","wristTwist","trunkTwist","neckTwist","oneLeg","abduct","shoulderUp","armSupport","static","repeat","rapid"];
+function defaults(){var m={load:0,coupling:0,wrist:1};MCHK.forEach(function(k){m[k]=false});return m}
+function cl(v,a,b){return Math.max(a,Math.min(b,v))}
+function rebaOf(a,m){
+  if(!a||a.trunk==null)return null;
+  var r={};
+  r.trunk=cl((a.trunk<5?1:a.trunk<=20?2:a.trunk<=60?3:4)+(m.trunkTwist?1:0),1,5);
+  r.neck=cl((a.neck==null||a.neck<=20?1:2)+(m.neckTwist?1:0),1,3);
+  r.legs=cl((m.oneLeg?2:1)+(a.knee==null?0:a.knee>60?2:a.knee>=30?1:0),1,4);
+  r.ua=cl((a.arm==null||a.arm<=20?1:a.arm<=45?2:a.arm<=90?3:4)+(m.abduct?1:0)+(m.shoulderUp?1:0)-(m.armSupport?1:0),1,6);
+  r.la=(a.elbow==null||(a.elbow>=60&&a.elbow<=100))?1:2;
+  r.wrist=cl(m.wrist+(m.wristTwist?1:0),1,3);
+  r.tA=TA[r.trunk-1][r.neck-1][r.legs-1];r.load=m.load+(m.shock?1:0);r.A=r.tA+r.load;
+  r.tB=TB[r.ua-1][r.la-1][r.wrist-1];r.coupling=m.coupling;r.B=r.tB+r.coupling;
+  r.C=TC[cl(r.A,1,12)-1][cl(r.B,1,12)-1];
+  r.act=(m["static"]?1:0)+(m.repeat?1:0)+(m.rapid?1:0);
+  r.total=r.C+r.act;r.a=a;
+  return r;
+}
+function rebaBand(t){return t<=3?0:t<=7?1:2}
+function applyReba(slot){
+  var c=[0,0,0],sum=0,n=0,peak=null,pi=0;
+  slot.samples.forEach(function(s,i){
+    if(!s.a)return;
+    var r=rebaOf(s.a,slot.manual);s.a.reba=r?r.total:null;if(!r)return;
+    n++;sum+=r.total;c[rebaBand(r.total)]++;
+    if(!peak||r.total>peak.total||(r.total===peak.total&&s.a.trunk>peak.a.trunk)){peak=r;pi=i}
+  });
+  slot.reba=n?{peak:peak,peakT:pi*slot.step,avg:sum/n,pct:c.map(function(x){return x/n*100})}:null;
+  slot.stats.reba=n?{peak:peak.total,avg:sum/n,pct:slot.reba.pct}:null;
+}
+function rebaLevel(t){
+  return t<=1?["Незначний ризик","Зміни не потрібні."]:
+    t<=3?["Низький ризик","Зміни можуть знадобитися."]:
+    t<=7?["Середній ризик","Потрібне подальше дослідження, зміни варто запланувати найближчим часом."]:
+    t<=10?["Високий ризик","Дослідіть операцію і впровадьте зміни найближчим часом."]:
+    ["Дуже високий ризик","Зміни потрібні негайно."];
+}
+
+/* ---------- example data ---------- */
+function demoSlot(maxTrunk,maxKnee,armLift){
+  var W=360,H=560,dur=12,step=0.1,samples=[];
+  var rad=function(d){return d*Math.PI/180};
+  for(var t=0;t<dur;t+=step){
+    var ph=(1-Math.cos(2*Math.PI*t/4))/2;
+    var th=rad(8+(maxTrunk-8)*ph),kn=rad(6+(maxKnee-6)*ph),be=rad(10+armLift*ph);
+    var an=[105,500];
+    var knp=[an[0]+105*Math.sin(kn/2),an[1]-105*Math.cos(kn/2)];
+    var hip=[knp[0]-105*Math.sin(kn/2),knp[1]-105*Math.cos(kn/2)];
+    var sh=[hip[0]+140*Math.sin(th),hip[1]-140*Math.cos(th)];
+    var nk=th+rad(12+10*ph);
+    var ear=[sh[0]+38*Math.sin(nk),sh[1]-38*Math.cos(nk)];
+    var el=[sh[0]+70*Math.sin(be),sh[1]+70*Math.cos(be)];
+    var wr=[el[0]+66*Math.sin(be+rad(25)),el[1]+66*Math.cos(be+rad(25))];
+    var P=[];for(var i=0;i<33;i++)P.push([0,0,0]);
+    var put=function(l,r,p){P[l]=[p[0],p[1],1];P[r]=[p[0]+7,p[1]-3,0.8]};
+    put(7,8,ear);put(11,12,sh);put(13,14,el);put(15,16,wr);put(23,24,hip);put(25,26,knp);put(27,28,an);
+    samples.push({lm:P,a:angles(P)});
+  }
+  var s={video:null,demo:true,w:W,h:H,duration:dur,step:step,samples:samples,t:0};
+  smooth(samples);s.stats=stats(s);s.cycles=detectCycles(s);s.manual=defaults();applyReba(s);return s;
+}
+var slots={before:demoSlot(82,28,6),after:demoSlot(30,12,28)};
+var cur="before",both=false,chartKey="trunk",playing=false,lastTs=0,busy=0,blurOn=true,grabbing=false;
+
+/* ---------- pose model ---------- */
+var posePromise=null,lastRes=null;
+/* Binary model files ship as base64 inside JSON; these shims hand them to the pose library. */
+var BIN=["pose_landmark_full.tflite","pose_solution_packed_assets.data","pose_web.binarypb","pose_solution_simd_wasm_bin.wasm","pose_solution_wasm_bin.wasm"];
+var binCache={},realFetch=window.fetch.bind(window),RealXHR=window.XMLHttpRequest;
+function binName(u){u=String(u&&u.url?u.url:u).split("?")[0];for(var i=0;i<BIN.length;i++){if(u.slice(-BIN[i].length)===BIN[i])return BIN[i]}return null}
+function loadBin(n){
+  if(!binCache[n])binCache[n]=realFetch("mp/"+n+".json").then(function(r){if(!r.ok)throw new Error("model file "+r.status);return r.json()}).then(function(j){
+    var s=atob(j.b64),len=s.length,u=new Uint8Array(len);for(var i=0;i<len;i++)u[i]=s.charCodeAt(i);return u.buffer});
+  return binCache[n];
+}
+window.fetch=function(u,o){
+  var n=binName(u);if(!n)return realFetch(u,o);
+  return loadBin(n).then(function(buf){return new Response(buf.slice(0),{status:200,headers:{"Content-Type":/\.wasm$/.test(n)?"application/wasm":"application/octet-stream"}})});
+};
+window.XMLHttpRequest=function(){
+  var x=new RealXHR(),open=x.open;
+  x.open=function(m,u){
+    var n=binName(u);if(!n)return open.apply(x,arguments);
+    x.send=function(){loadBin(n).then(function(buf){
+      Object.defineProperty(x,"status",{value:200});Object.defineProperty(x,"readyState",{value:4});Object.defineProperty(x,"response",{value:buf.slice(0)});
+      if(x.onload)x.onload({target:x,loaded:buf.byteLength,total:buf.byteLength});
+    },function(e){if(x.onerror)x.onerror(e)})};
+  };
+  return x;
+};
+function ensurePose(){
+  if(posePromise)return posePromise;
+  posePromise=(async function(){
+    if(!window.Pose)throw new Error("no-lib");
+    var p=new window.Pose({locateFile:function(f){return "mp/"+f}});
+    p.setOptions({modelComplexity:1,smoothLandmarks:true,enableSegmentation:false,minDetectionConfidence:0.5,minTrackingConfidence:0.5});
+    p.onResults(function(r){lastRes=r});
+    await p.initialize();
+    return p;
+  })();
+  posePromise.catch(function(){posePromise=null});
+  return posePromise;
+}
+function once(el,ev,ms){return new Promise(function(res){var done=false;var f=function(){if(done)return;done=true;el.removeEventListener(ev,f);res()};el.addEventListener(ev,f);setTimeout(f,ms)})}
+function setStatus(msg,err){var s=$("status");s.textContent=msg||"";s.className="small"+(err?" err":"")}
+
+async function analyze(key,file){
+  var my=++busy;playing=false;
+  var v=document.createElement("video");
+  v.muted=true;v.playsInline=true;v.preload="auto";v.src=URL.createObjectURL(file);
+  $("prog").hidden=false;$("prog").value=0;
+  setStatus("Відкриваю відео…");
+  try{
+    if(v.readyState<1)await once(v,"loadedmetadata",8000);
+    if(!v.videoWidth||!isFinite(v.duration)||v.duration<=0)throw new Error("bad-video");
+    try{await v.play();v.pause()}catch(e){}
+    setStatus("Завантажую модель розпізнавання пози (близько 15 МБ, лише вперше)…");
+    var pose=await ensurePose();
+    if(my!==busy)return;
+    pose.reset();
+    var dur=v.duration,step=Math.max(0.1,dur/600);
+    var sc=Math.min(1,480/Math.max(v.videoWidth,v.videoHeight));
+    var w=Math.round(v.videoWidth*sc),h=Math.round(v.videoHeight*sc);
+    var off=document.createElement("canvas");off.width=w;off.height=h;
+    var octx=off.getContext("2d"),samples=[];
+    for(var t=0;t<dur;t+=step){
+      if(my!==busy)return;
+      v.currentTime=Math.min(t,dur-0.01);
+      await once(v,"seeked",3000);
+      octx.drawImage(v,0,0,w,h);
+      lastRes=null;
+      await pose.send({image:off});
+      var lm=lastRes&&lastRes.poseLandmarks,P=null;
+      if(lm&&lm.length>=29){P=lm.map(function(p){return [p.x*w,p.y*h,p.visibility==null?1:p.visibility]})}
+      samples.push({lm:P,a:P?angles(P):null});
+      $("prog").value=t/dur;
+      setStatus("Аналізую кадри: "+Math.round(t/dur*100)+"%");
+    }
+    smooth(samples);
+    var slot={video:v,demo:false,w:w,h:h,duration:dur,step:step,samples:samples,t:0,name:file.name};
+    slot.stats=stats(slot);slot.cycles=detectCycles(slot);slot.manual=Object.assign({},slots[key].manual);applyReba(slot);
+    slots[key]=slot;
+    v.currentTime=peakTime(slot);
+    if(slot.stats.coverage<0.3)setStatus("Людину розпізнано менш ніж на третині кадрів. Зніміть збоку, щоб працівник був у кадрі на повний зріст і його не закривало обладнання.",true);
+    else setStatus("Готово: "+samples.length+" кадрів, людину розпізнано на "+Math.round(slot.stats.coverage*100)+"%.");
+  }catch(e){
+    var m=e&&e.message;
+    setStatus(m==="bad-video"?"Не вдалося відкрити цей файл як відео. Спробуйте MP4 (H.264).":
+      m==="no-lib"?"Модель розпізнавання не завантажилась. Оновіть сторінку і спробуйте ще раз.":
+      "Аналіз зупинився через помилку: "+(m||e)+". Спробуйте коротше відео або інший браузер.",true);
+  }finally{
+    if(my===busy){$("prog").hidden=true;renderAll()}
+  }
+}
+function peakTime(slot){var bi=0,bv=-1;slot.samples.forEach(function(s,i){if(s.a&&s.a.trunk>bv){bv=s.a.trunk;bi=i}});return bi*slot.step}
+
+/* ---------- drawing ---------- */
+function sampleAt(slot,t){
+  var f=t/slot.step,i=Math.max(0,Math.min(slot.samples.length-1,Math.floor(f)));
+  var a=slot.samples[i],b=slot.samples[Math.min(slot.samples.length-1,i+1)];
+  if(!a||!a.lm)return a||null;
+  if(!b.lm)return a;
+  var u=Math.max(0,Math.min(1,f-i));
+  var P=a.lm.map(function(p,j){var q=b.lm[j];return [p[0]+(q[0]-p[0])*u,p[1]+(q[1]-p[1])*u,Math.min(p[2],q[2])]});
+  var aa=angles(P);if(!aa)return {lm:P,a:a.a};var rr=rebaOf(aa,slot.manual);aa.reba=rr?rr.total:null;return {lm:P,a:aa};
+}
+function now(slot){return slot.video?slot.video.currentTime:slot.t}
+function vsize(slot){return slot.video?[slot.video.videoWidth,slot.video.videoHeight]:[slot.w,slot.h]}
+function active(){return both?[slots.before,slots.after]:[slots[cur]]}
+function atEnd(sl){return now(sl)>=sl.duration-0.05}
+function setTime(sl,t){t=Math.max(0,Math.min(t,sl.duration));if(sl.video)sl.video.currentTime=Math.min(t,sl.duration-0.01);else sl.t=t}
+var tiny=document.createElement("canvas");tiny.width=tiny.height=10;
+function hideFace(ctx,img,P,k,W,H){
+  if(Math.max(P[7][2],P[8][2],P[0][2])<0.3)return;
+  var e=mid(P,7,8),sh=mid(P,11,12),n=P[0];
+  var r=Math.max(10,0.9*Math.hypot(e[0]-sh[0],e[1]-sh[1])*k,0.85*Math.hypot(P[7][0]-P[8][0],P[7][1]-P[8][1])*k,0.33*Math.hypot(P[11][0]-P[12][0],P[11][1]-P[12][1])*k);
+  var cx=e[0]*k,cy=e[1]*k;
+  if(n[2]>0.3){cx+=(n[0]*k-cx)*0.4;cy+=(n[1]*k-cy)*0.4}
+  var iw=img.videoWidth||img.width,ih=img.videoHeight||img.height,fx=iw/W,fy=ih/H;
+  var sx=Math.max(0,Math.min(iw-2,(cx-r)*fx)),sy=Math.max(0,Math.min(ih-2,(cy-r)*fy));
+  var sw=Math.max(1,Math.min(2*r*fx,iw-sx)),sh2=Math.max(1,Math.min(2*r*fy,ih-sy));
+  try{tiny.getContext("2d").drawImage(img,sx,sy,sw,sh2,0,0,10,10)}catch(err){return}
+  ctx.save();ctx.beginPath();ctx.arc(cx,cy,r,0,6.3);ctx.clip();ctx.imageSmoothingEnabled=false;
+  ctx.drawImage(tiny,sx/fx,sy/fy,sw/fx,sh2/fy);ctx.restore();
+}
+function drawSlot(ctx,slot,key,W,H,tag,at,src){
+  var img=src||slot.video;
+  if(img){try{ctx.drawImage(img,0,0,W,H)}catch(e){ctx.fillStyle="#10161d";ctx.fillRect(0,0,W,H)}}
+  else{
+    ctx.fillStyle="#18222d";ctx.fillRect(0,0,W,H);
+    ctx.fillStyle="#222f3c";ctx.fillRect(0,H*0.9,W,H*0.1);
+    ctx.fillStyle="#8fa0b1";ctx.font="500 "+Math.round(W*0.04)+"px IBM Plex Sans, sans-serif";ctx.textAlign="left";
+    ctx.fillText("Приклад: "+(key==="before"?"підйом з підлоги":"підйом з робочої висоти"),W*0.05,H*(tag?0.14:0.07));
+  }
+  var s=sampleAt(slot,at==null?now(slot):at);
+  if(blurOn&&img&&s&&s.lm)hideFace(ctx,img,s.lm,W/slot.w,W,H);
+  if(s&&s.lm){
+    var k=W/slot.w,P=s.lm,a=s.a||{};
+    var lw=Math.max(3,W*0.012);
+    var seg=function(i,j,jk){
+      if(P[i][2]<0.3||P[j][2]<0.3)return;
+      var z=jk?zone(jk,a[jk]):-1;
+      ctx.strokeStyle=z<0?"#dfe6ee":COL[z];ctx.lineWidth=lw;ctx.lineCap="round";
+      ctx.beginPath();ctx.moveTo(P[i][0]*k,P[i][1]*k);ctx.lineTo(P[j][0]*k,P[j][1]*k);ctx.stroke();
+    };
+    seg(11,12);seg(23,24);
+    seg(12,24,"trunk");seg(11,23,"trunk");
+    [[12,14,16,24,26,28],[11,13,15,23,25,27]].forEach(function(S){
+      seg(S[0],S[1],"arm");seg(S[1],S[2],"arm");seg(S[3],S[4],"knee");seg(S[4],S[5],"knee");
+    });
+    var sh=mid(P,11,12),ear=mid(P,7,8),zn=zone("neck",a.neck);
+    ctx.strokeStyle=zn<0?"#dfe6ee":COL[zn];ctx.lineWidth=lw;
+    ctx.beginPath();ctx.moveTo(sh[0]*k,sh[1]*k);ctx.lineTo(ear[0]*k,ear[1]*k);ctx.stroke();
+    [7,8,11,12,13,14,15,16,23,24,25,26,27,28].forEach(function(i){
+      if(P[i][2]<0.3)return;
+      ctx.fillStyle="#ffffff";ctx.strokeStyle="#10161d";ctx.lineWidth=1.5;
+      ctx.beginPath();ctx.arc(P[i][0]*k,P[i][1]*k,lw*0.55,0,6.3);ctx.fill();ctx.stroke();
+    });
+    if(a.trunk!=null){
+      var bw=W*(tag?0.66:0.5),bh=Math.max(H*0.1,W*0.16),bx=(W-bw)/2,by=H-bh-H*0.02,zt=zone("trunk",a.trunk);
+      ctx.fillStyle="rgba(10,14,19,.78)";ctx.beginPath();
+      if(ctx.roundRect)ctx.roundRect(bx,by,bw,bh,bh*0.2);else ctx.rect(bx,by,bw,bh);ctx.fill();
+      ctx.textAlign="center";ctx.fillStyle="#cfd8e2";ctx.font="500 "+Math.round(bh*0.26)+"px IBM Plex Sans, sans-serif";
+      ctx.fillText("Кут тулуба"+(a.reba!=null?" · REBA "+a.reba:""),W/2,by+bh*0.36);
+      ctx.fillStyle=COL[zt];ctx.font="500 "+Math.round(bh*0.46)+"px IBM Plex Mono, monospace";
+      ctx.fillText(Math.round(a.trunk)+"°",W/2,by+bh*0.86);
+    }
+  }
+  if(tag){
+    var th=Math.round(W*0.085),txt=LABEL[key];
+    ctx.font="600 "+Math.round(th*0.6)+"px IBM Plex Sans, sans-serif";
+    var tw=ctx.measureText(txt).width+th*0.8;
+    ctx.fillStyle="rgba(10,14,19,.82)";ctx.beginPath();
+    if(ctx.roundRect)ctx.roundRect(W*0.04,W*0.04,tw,th,th*0.25);else ctx.rect(W*0.04,W*0.04,tw,th);ctx.fill();
+    ctx.fillStyle="#ffffff";ctx.textAlign="left";ctx.textBaseline="middle";ctx.fillText(txt,W*0.04+th*0.4,W*0.04+th*0.54);ctx.textBaseline="alphabetic";
+  }
+}
+function drawView(){
+  var cv=$("view"),ctx=cv.getContext("2d"),list=active(),W,H;
+  if(!both){
+    var z=vsize(list[0]),sc=Math.min(1,720/Math.max(z[0],z[1]));W=Math.round(z[0]*sc);H=Math.round(z[1]*sc);
+    if(cv.width!==W||cv.height!==H){cv.width=W;cv.height=H}
+    drawSlot(ctx,list[0],cur,W,H,false);
+  }else{
+    var hw=360,gap=6,hs=list.map(function(sl){var q=vsize(sl);return Math.round(hw*q[1]/q[0])});
+    W=hw*2+gap;H=Math.max(hs[0],hs[1]);
+    if(cv.width!==W||cv.height!==H){cv.width=W;cv.height=H}
+    ctx.fillStyle="#070a0e";ctx.fillRect(0,0,W,H);
+    list.forEach(function(sl,i){
+      ctx.save();ctx.translate(i*(hw+gap),Math.round((H-hs[i])/2));ctx.beginPath();ctx.rect(0,0,hw,hs[i]);ctx.clip();
+      drawSlot(ctx,sl,i?"after":"before",hw,hs[i],true);ctx.restore();
+    });
+  }
+  $("time").textContent=both?"До "+now(list[0]).toFixed(1)+" с · Після "+now(list[1]).toFixed(1)+" с":now(list[0]).toFixed(1)+" / "+list[0].duration.toFixed(1)+" с";
+  if(document.activeElement!==$("seek")||playing)$("seek").value=Math.round(now(list[0])/list[0].duration*1000);
+}
+function drawChart(){
+  if(both)return;
+  var slot=slots[cur],cv=$("chart"),ctx=cv.getContext("2d");
+  var r=cv.getBoundingClientRect(),dpr=window.devicePixelRatio||1;
+  var W=Math.max(200,Math.round(r.width*dpr)),H=Math.round(180*dpr);
+  if(cv.width!==W||cv.height!==H){cv.width=W;cv.height=H}
+  ctx.clearRect(0,0,W,H);
+  var z=J[chartKey].z,st=slot.stats[chartKey];
+  var isR=chartKey==="reba",unit=isR?"":"°";
+  var ymax=isR?Math.max(12,st?st.peak:12):Math.max(90,Math.ceil(((st?st.peak:90)+5)/30)*30);
+  var L=38*dpr,R=8*dpr,T=8*dpr,B=22*dpr,pw=W-L-R,ph=H-T-B;
+  var y=function(v){return T+ph*(1-v/ymax)},x=function(t){return L+pw*t/slot.duration};
+  var bands=[[0,z[0],css("--ok-soft")],[z[0],z[1],css("--warn-soft")],[z[1],ymax,css("--bad-soft")]];
+  bands.forEach(function(b){ctx.fillStyle=b[2];ctx.fillRect(L,y(b[1]),pw,y(b[0])-y(b[1]))});
+  if(slot.cycles&&slot.cycles.starts.length){
+    ctx.save();ctx.setLineDash([3*dpr,4*dpr]);ctx.strokeStyle=css("--muted");ctx.lineWidth=dpr;
+    slot.cycles.starts.forEach(function(t0){ctx.beginPath();ctx.moveTo(x(t0),T);ctx.lineTo(x(t0),T+ph);ctx.stroke()});
+    ctx.restore();
+  }
+  ctx.fillStyle=css("--muted");ctx.font=(11*dpr)+"px IBM Plex Mono, monospace";ctx.textAlign="right";ctx.textBaseline="middle";
+  [0,z[0],z[1],ymax].forEach(function(v){ctx.fillText(v+unit,L-6*dpr,y(v))});
+  ctx.textAlign="center";ctx.textBaseline="top";
+  var ticks=4;for(var i=0;i<=ticks;i++){var tt=slot.duration*i/ticks;ctx.fillText(tt.toFixed(tt<10?1:0)+" с",Math.min(W-R-14*dpr,Math.max(L+12*dpr,x(tt))),H-B+6*dpr)}
+  ctx.strokeStyle=css("--ink");ctx.lineWidth=2*dpr;ctx.lineJoin="round";ctx.beginPath();
+  var pen=false;
+  slot.samples.forEach(function(s,i){
+    var v=s.a?s.a[chartKey]:null;
+    if(v==null){pen=false;return}
+    var px=x(i*slot.step),py=y(Math.min(v,ymax));
+    if(pen)ctx.lineTo(px,py);else ctx.moveTo(px,py);pen=true;
+  });
+  ctx.stroke();
+  var cx=x(Math.min(now(slot),slot.duration));
+  ctx.strokeStyle=css("--accent");ctx.lineWidth=2*dpr;ctx.beginPath();ctx.moveTo(cx,T);ctx.lineTo(cx,T+ph);ctx.stroke();
+  var sNow=sampleAt(slot,now(slot)),vNow=sNow&&sNow.a?sNow.a[chartKey]:null;
+  if(vNow!=null){ctx.fillStyle=css("--accent");ctx.beginPath();ctx.arc(cx,y(Math.min(vNow,ymax)),4.5*dpr,0,6.3);ctx.fill()}
+}
+
+/* ---------- panels ---------- */
+function fmt(v,d){return v==null?"–":v.toFixed(d==null?0:d)}
+function barHtml(p){return '<div class="bar"><i class="g" style="width:'+p[0]+'%"></i><i class="y" style="width:'+p[1]+'%"></i><i class="r" style="width:'+p[2]+'%"></i></div>'}
+function renderSummary(){
+  var slot=slots[cur],st=slot.stats.trunk;
+  $("sumTitle").textContent="Тулуб за цикл: "+LABEL[cur];
+  $("sumMeta").textContent=slot.demo?"приклад":(slot.name||"");
+  var set=function(id,v,z){var el=$(id);el.querySelector("b").textContent=v;if(z!=null)el.className="tile z"+z};
+  if(!st){set("tPeak","–",0);set("tAvg","–",0);set("tRed","–");$("zoneBar").innerHTML="";$("zoneLegend").textContent="Немає кадрів, де видно тулуб.";return}
+  set("tPeak",fmt(st.peak),zone("trunk",st.peak));set("tAvg",fmt(st.avg),zone("trunk",st.avg));set("tRed",fmt(st.sec[2],1));
+  $("zoneBar").innerHTML='<i class="g" style="width:'+st.pct[0]+'%"></i><i class="y" style="width:'+st.pct[1]+'%"></i><i class="r" style="width:'+st.pct[2]+'%"></i>';
+  var z=J.trunk.z,names=["до "+z[0]+"°",z[0]+"–"+z[1]+"°","понад "+z[1]+"°"],vars=["--ok","--warn","--bad"];
+  $("zoneLegend").innerHTML=names.map(function(n,i){return '<span><span class="dot" style="background:var('+vars[i]+')"></span>'+n+': <b class="mono">'+fmt(st.pct[i])+'%</b></span>'}).join("");
+}
+function renderJoints(){
+  var slot=slots[cur];
+  var h='<tr><th>Суглоб</th><th>Середній</th><th>Пік</th><th>Червона зона</th><th>Розподіл часу</th></tr>';
+  KEYS.forEach(function(k){
+    var s=slot.stats[k];
+    if(!s){h+='<tr><td>'+J[k].name+'</td><td colspan="4" style="text-align:left" class="small">не видно в кадрі</td></tr>';return}
+    h+='<tr><td>'+J[k].name+'</td><td class="num">'+fmt(s.avg)+'°</td><td class="num"><span class="pill p'+zone(k,s.peak)+'">'+fmt(s.peak)+'°</span></td><td class="num">'+fmt(s.pct[2])+'%</td><td>'+barHtml(s.pct)+'</td></tr>';
+  });
+  $("joints").innerHTML=h;
+}
+function renderReba(){
+  var slot=slots[cur],R=slot.reba;
+  $("rebaTitle").textContent="Висновок за REBA: "+LABEL[cur];
+  MSEL.forEach(function(k){$("m-"+k).value=String(slot.manual[k])});
+  MCHK.forEach(function(k){$("m-"+k).checked=!!slot.manual[k]});
+  if(!R){$("rebaScore").textContent="–";$("rebaScore").className="score p0";$("rebaLevel").textContent="Немає даних";$("rebaText").textContent="На відео не знайдено кадрів, де видно тулуб.";$("rebaDrivers").textContent="";$("rebaTbl").innerHTML="";$("rebaBar").innerHTML="";$("rebaLegend").innerHTML="";$("rebaJump").hidden=true;return}
+  var p=R.peak,lv=rebaLevel(p.total),a=p.a;
+  $("rebaJump").hidden=false;
+  $("rebaScore").textContent=p.total;$("rebaScore").className="score p"+rebaBand(p.total);
+  $("rebaLevel").textContent=lv[0]+" (рівень "+(p.total<=1?0:p.total<=3?1:p.total<=7?2:p.total<=10?3:4)+")";
+  $("rebaText").textContent=lv[1]+" Оцінено найгіршу позу циклу, "+R.peakT.toFixed(1)+" с. Середній бал за цикл "+R.avg.toFixed(1)+".";
+  var d=[];
+  if(p.trunk>=3)d.push("тулуб "+fmt(a.trunk)+"° ("+p.trunk+" б.)");
+  if(p.ua>=3)d.push("плече "+fmt(a.arm)+"° ("+p.ua+" б.)");
+  if(p.neck>=2)d.push("шия "+fmt(a.neck)+"° ("+p.neck+" б.)");
+  if(p.legs>=2)d.push("ноги ("+p.legs+" б.)");
+  if(p.load>=1)d.push("вантаж (+"+p.load+")");
+  if(p.coupling>=1)d.push("захват (+"+p.coupling+")");
+  if(p.act>=1)d.push("активність (+"+p.act+")");
+  $("rebaDrivers").textContent=d.length?"Найбільший внесок: "+d.join(", ")+".":"Жоден компонент не виходить за нейтральні межі.";
+  var row=function(n,ang,sc,cls){return '<tr'+(cls?' class="'+cls+'"':'')+'><td>'+n+'</td><td class="num">'+(ang==null?"":fmt(ang)+"°")+'</td><td class="num">'+sc+'</td></tr>'};
+  $("rebaTbl").innerHTML='<tr><th>Компонент</th><th>Кут</th><th>Бал</th></tr>'+
+    row("Тулуб",a.trunk,p.trunk)+row("Шия",a.neck,p.neck)+row("Ноги",a.knee,p.legs)+row("Таблиця A",null,p.tA)+row("Вантаж",null,"+"+p.load)+row("Бал A",null,p.A,"sub")+
+    row("Плече",a.arm,p.ua)+row("Передпліччя",a.elbow,p.la)+row("Зап'ястя",null,p.wrist)+row("Таблиця B",null,p.tB)+row("Захват",null,"+"+p.coupling)+row("Бал B",null,p.B,"sub")+
+    row("Таблиця C",null,p.C)+row("Активність",null,"+"+p.act)+row("REBA",null,p.total,"total");
+  $("rebaBar").innerHTML='<i class="g" style="width:'+R.pct[0]+'%"></i><i class="y" style="width:'+R.pct[1]+'%"></i><i class="r" style="width:'+R.pct[2]+'%"></i>';
+  var names=["бал 1–3","бал 4–7","бал 8+"],vars=["--ok","--warn","--bad"];
+  $("rebaLegend").innerHTML="<span>Час циклу:</span>"+names.map(function(n,i){return '<span><span class="dot" style="background:var('+vars[i]+')"></span>'+n+': <b class="mono">'+fmt(R.pct[i])+'%</b></span>'}).join("");
+}
+function advice(slot){
+  var S=slot.stats,R=slot.reba,m=slot.manual,risks=[],recs=[];
+  if(!R)return null;
+  var risk=function(l,t,x){risks.push({l:l,t:t,x:x})},rec=function(l,k,x){recs.push({l:l,k:k,x:x})};
+  var T=S.trunk,N=S.neck,A=S.arm,K=S.knee,TECH="Технічна",ORG="Організаційна";
+  var out=function(st){return 100-st.pct[0]};
+  if(R.pct[2]>=10)risk(2,"Тривалість","Працівник перебуває у позах із балом REBA 8 і вище "+fmt(R.pct[2])+"% циклу. Операція пріоритетна для змін.");
+  if(T){
+    if(T.peak>60){
+      risk(2,"Поперек","Нахил тулуба до "+fmt(T.peak)+"°, "+fmt(T.pct[2])+"% циклу понад 60°. Високе навантаження на поперековий відділ.");
+      rec(2,TECH,"Підняти точку взяття та укладання до висоти 75–110 см: підйомний стіл, візок із пружинним дном або палета на підставці.");
+    }else if(T.peak>20&&out(T)>=30){
+      risk(1,"Поперек","Нахил тулуба до "+fmt(T.peak)+"°, "+fmt(out(T))+"% циклу поза нейтральною зоною.");
+      rec(1,TECH,"Відрегулювати висоту робочої поверхні та наблизити предмети, щоб працювати з прямою спиною. Прибрати перешкоди, які не дають стати впритул.");
+    }
+    if(T.peak>20&&m.load>=1){
+      var hv=m.load>=2;
+      risk(hv?2:1,"Поперек і вантаж","Нахил поєднується з вантажем "+(hv?"понад 10 кг":"5–10 кг")+", це збільшує стиск у поперековому відділі.");
+      rec(hv?2:1,TECH,hv?"Механізувати підйом: вакуумний захват, маніпулятор або тельфер. Якщо це неможливо, зменшити масу одиниці тари або піднімати вдвох.":"Зменшити масу одиниці тари та скоротити відстань перенесення, тримати вантаж біля тулуба.");
+    }
+    if(T.peak>60&&K&&K.peak<30){
+      risk(1,"Техніка підйому","Нахил виконується спиною при майже прямих ногах: коліна згинаються лише до "+fmt(K.peak)+"°.");
+      rec(1,ORG,"Навчити техніки підйому з присіданням і вантажем біля тіла. Це доповнення до зміни висоти, а не заміна.");
+    }
+  }
+  if(m.trunkTwist){
+    risk(T&&T.peak>20?2:1,"Скручування тулуба","Тулуб скручується або нахиляється вбік"+(T&&T.peak>20?" одночасно з нахилом уперед":"")+".");
+    rec(T&&T.peak>20?2:1,TECH,"Розташувати точки взяття та укладання так, щоб працівник повертався кроком, а не скручуванням. Кут між ними до 90°, відстань до одного кроку.");
+  }
+  if(A){
+    if(A.peak>90){
+      var over=slot.samples.some(function(q){return q.a&&q.a.arm>90&&q.a.trunk<30});
+      if(over){
+        risk(2,"Плечі","Рука піднімається до "+fmt(A.peak)+"° відносно тулуба, "+fmt(A.pct[2])+"% циклу вище рівня плеча.");
+        rec(2,TECH,"Опустити точку роботи нижче рівня плечей: обмежити висоту штабеля, додати платформу або змінити рівень подачі.");
+      }else{
+        risk(2,"Плечі","Рука витягнута до "+fmt(A.peak)+"° відносно тулуба під час нахилу, "+fmt(A.pct[2])+"% циклу понад 90°. Вантаж далеко від тіла.");
+        rec(2,TECH,"Скоротити дистанцію досягання: подавати вантаж ближче до краю, прибрати бортики та перешкоди між працівником і вантажем.");
+      }
+    }else if(A.peak>45&&out(A)>=30){
+      risk(1,"Плечі","Рука відведена до "+fmt(A.peak)+"°, "+fmt(out(A))+"% циклу поза нейтральною зоною.");
+      rec(1,TECH,"Перенести деталі та інструмент у зону досяжності 30–40 см від тіла, щоб лікті залишалися біля тулуба.");
+    }
+  }
+  if(m.abduct||m.shoulderUp){
+    risk(1,"Плечі","Плече "+(m.abduct&&m.shoulderUp?"відведене вбік і підняте":m.abduct?"відведене вбік або ротоване":"підняте")+" під час роботи.");
+    rec(1,TECH,"Розмістити предмети прямо перед працівником і знизити робочу висоту до рівня ліктя.");
+  }
+  if(N&&N.peak>20&&out(N)>=30){
+    var nb=N.pct[2]>=20;
+    risk(nb?2:1,"Шия","Нахил шиї до "+fmt(N.peak)+"°, "+fmt(out(N))+"% циклу понад 20°.");
+    rec(nb?2:1,TECH,"Підняти зону зорового контролю: нахилити робочу поверхню, розмістити індикацію чи документи на рівні очей, покращити освітлення.");
+  }
+  if(m.neckTwist){
+    risk(1,"Шия","Шия скручується або нахиляється вбік.");
+    rec(1,TECH,"Розмістити об'єкт спостереження прямо перед працівником.");
+  }
+  if(K&&K.peak>60){
+    risk(1,"Коліна","Глибоке присідання до "+fmt(K.peak)+"°, "+fmt(K.pct[2])+"% циклу.");
+    rec(1,TECH,"Підняти нижній рівень зберігання щонайменше до 50 см від підлоги.");
+  }
+  if(m.oneLeg){
+    risk(1,"Стійкість","Опора на одну ногу або нестійка поза, є ризик втрати рівноваги.");
+    rec(1,TECH,"Забезпечити рівну неслизьку підлогу і місце для обох ніг, прибрати педалі та перешкоди під ногами.");
+  }
+  if(m.wrist>=2||m.wristTwist){
+    risk(1,"Зап'ястя","Зап'ястя зігнуте понад 15° або відхилене вбік.");
+    rec(1,TECH,"Змінити кут рукоятки інструмента або орієнтацію деталі, щоб кисть залишалася на одній лінії з передпліччям.");
+  }
+  if(m.coupling>=1){
+    risk(m.coupling>=2?2:1,"Захват","Захват "+["","задовільний","поганий","неприйнятний"][m.coupling]+": зростає зусилля кисті та ризик випустити вантаж.");
+    rec(m.coupling>=2?2:1,TECH,"Використовувати тару з ручками або вирізами для рук, додати допоміжні захвати.");
+  }
+  if(m.shock){
+    risk(1,"Ривки","Є ривки або різкі зусилля.");
+    rec(1,TECH,"Усунути причину ривка: застрягання, нерівності, надмірне тертя. Додати ролики або напрямні.");
+  }
+  if(m["static"]){
+    risk(1,"Статичне навантаження","Поза утримується довше 1 хвилини.");
+    rec(1,ORG,"Додати мікропаузи та зміну пози, чергувати роботу стоячи й сидячи, дати опору для рук чи тулуба.");
+  }
+  if(m.repeat){
+    risk(1,"Повторюваність","Рух повторюється частіше 4 разів на хвилину.");
+    rec(1,ORG,"Запровадити ротацію між операціями з різним навантаженням і перерозподілити роботу між операторами.");
+  }
+  if(m.rapid){
+    risk(1,"Різкі зміни пози","Поза швидко й значно змінюється або основа нестійка.");
+    rec(1,TECH,"Вирівняти висоти суміжних точок роботи, щоб прибрати різкі переходи між нахилом і випрямленням.");
+  }
+  if(!risks.length){
+    risks.push({l:0,t:"Суттєвих ризиків не виявлено",x:"Кути й тривалість залишаються в нейтральних межах для всіх суглобів, які видно на відео."});
+    recs.push({l:0,k:ORG,x:"Зафіксувати поточний метод у стандартній роботі та перевіряти його під час аудитів."});
+  }else if(R.peak.total>=4){
+    rec(0,ORG,"Після змін зняти операцію повторно й порівняти у вкладці «Після».");
+  }
+  var by=function(a,b){return b.l-a.l};
+  risks.sort(by);recs.sort(function(a,b){return b.l-a.l||(a.k===b.k?0:a.k===TECH?-1:1)});
+  return {risks:risks,recs:recs};
+}
+var LV=["Низький","Середній","Високий"];
+function renderAdvice(){
+  var slot=slots[cur],ad=advice(slot);
+  $("advTitle").textContent="Ризики: "+LABEL[cur];
+  if(!ad){$("risks").innerHTML="<li>Немає даних для оцінки.</li>";$("recs").innerHTML="";return}
+  $("risks").innerHTML=ad.risks.map(function(r){return '<li><span class="pill p'+r.l+'">'+LV[r.l]+'</span><span><b>'+r.t+'.</b> '+r.x+'</span></li>'}).join("");
+  $("recs").innerHTML=ad.recs.map(function(r,i){return '<li><span class="n">'+(i+1)+'</span><span>'+r.x+'<span class="kind">'+r.k+(r.l===2?", першочергова":"")+'</span></span></li>'}).join("");
+}
+function prep(cv,w,h){
+  var d=window.devicePixelRatio||1,pw=Math.round(w*d),ph=Math.round(h*d);
+  if(cv.width!==pw||cv.height!==ph){cv.width=pw;cv.height=ph}
+  cv.style.width=w+"px";cv.style.height=h+"px";
+  var c=cv.getContext("2d");c.setTransform(d,0,0,d,0,0);c.clearRect(0,0,w,h);return c;
+}
+function regionNote(r){
+  if(r.manual)return "з форми: "+["","нейтральне","згин понад 15° або відхилення","згин понад 15° і відхилення"][r.w];
+  if(!r.st)return "не видно в кадрі";
+  return "пік "+fmt(r.st.peak)+"°, "+fmt(100-r.st.pct[0])+"% циклу поза зеленою зоною";
+}
+function renderBody(){
+  var slot=slots[cur],n=css("--line");
+  $("bodyTitle").textContent="Карта навантаження: "+LABEL[cur];
+  drawBody(prep($("body"),130,300),slot,4,4,290,n);
+  $("bodyList").innerHTML=regions(slot).map(function(r){
+    return '<li><span class="sw" style="background:'+(heat(r.idx)||n)+'"></span><span><b>'+r.name+'</b>'+(r.idx==null?'':' · '+fmt(r.idx)+', '+idxBand(r.idx))+'<small>'+regionNote(r)+'</small></span></li>';
+  }).join("");
+  drawBody(prep($("bodyB"),120,280),slots.before,4,4,270,n);
+  drawBody(prep($("bodyA"),120,280),slots.after,4,4,270,n);
+  var rb=regions(slots.before),ra=regions(slots.after);
+  var cell=function(r){return r.idx==null?"–":'<span class="sw" style="background:'+heat(r.idx)+'"></span>'+fmt(r.idx)};
+  $("bodyTbl").innerHTML='<tr><th>Зона</th><th>До</th><th>Після</th><th>Зміна</th></tr>'+rb.map(function(r,i){
+    var q=ra[i],d=(r.idx!=null&&q.idx!=null)?Math.round(q.idx)-Math.round(r.idx):null,cls=d==null||Math.abs(d)<0.5?"":d<0?"better":"worse";
+    return '<tr><td>'+r.name+'</td><td class="num">'+cell(r)+'</td><td class="num">'+cell(q)+'</td><td class="num '+cls+'">'+(d==null?"–":(d>0?"+":"")+d.toFixed(0))+'</td></tr>';
+  }).join("");
+}
+var CYCNAME={trunk:"нахил тулуба",arm:"рух плеча",knee:"згин колін"};
+function renderCycles(){
+  var slot=slots[cur],c=slot.cycles||{starts:[],durs:[],n:0};
+  $("cycTitle").textContent="Цикли та хронометраж: "+LABEL[cur];
+  $("cycMeta").textContent=c.n&&c.key?"за рухом: "+CYCNAME[c.key]:"";
+  var set=function(id,v){$(id).querySelector("b").textContent=v};
+  set("cN",c.n?String(c.n):"–");set("cMean",c.mean?fmt(c.mean,1):"–");set("cBest",c.mean?fmt(c.min,1):"–");set("cRpm",c.rpm?fmt(c.rpm,1):"–");
+  $("cycBars").hidden=!c.durs.length;
+  $("cycBars").innerHTML=c.durs.map(function(d){return '<i'+(d===c.min?' class="best"':'')+' style="height:'+Math.max(4,d/c.max*100)+'%" title="'+d.toFixed(1)+' с"></i>'}).join("");
+  $("cycNote").textContent=c.durs.length?"Кожен стовпчик показує тривалість одного циклу, найкращий виділено. Найдовший "+fmt(c.max,1)+" с"+(c.cv!=null?", розкид "+fmt(c.cv)+"%":"")+".":
+    c.n===1?"Знайдено один повтор. Для часу циклу потрібно щонайменше два.":
+    "Повторюваний рух не знайдено: кут змінюється менше ніж на 15° або у відео менш ніж два повтори.";
+  var show=!!(c.rpm&&c.rpm>4&&!slot.manual.repeat);
+  $("cycHint").hidden=!show;
+  if(show)$("cycHintText").textContent="За відео "+fmt(c.rpm,1)+" повторів за хвилину. У REBA понад 4 повтори додають 1 бал за активність.";
+}
+function nf(v,d){
+  if(v==null||!isFinite(v))return "–";
+  var p=v.toFixed(d||0).split(".");p[0]=p[0].replace(/\B(?=(\d{3})+(?!\d))/g," ");return p.join(".");
+}
+var EXPN=["У позах із балом REBA 8+, хв за зміну","Нахил тулуба понад 60°, хв за зміну","Глибоких нахилів (понад 60°) за зміну","У позах із балом REBA 8+, год за рік"];
+function expInputs(){return [Math.max(0,parseFloat($("expHours").value)||0),Math.max(0,parseFloat($("expShifts").value)||0)]}
+function exposure(slot){
+  var R=slot.reba,T=slot.stats.trunk;if(!R)return null;
+  var io=expInputs(),hrs=io[0],sh=io[1],cnt=0,state=0,valid=0;
+  slot.samples.forEach(function(q){
+    if(!q.a)return;valid++;var v=q.a.trunk;
+    if(v>60){if(state!==1)cnt++;state=1}else if(v<50)state=-1;
+  });
+  var rate=valid?cnt/(valid*slot.step):0;
+  return [R.pct[2]/100*hrs*60,T?T.pct[2]/100*hrs*60:null,rate*hrs*3600,R.pct[2]/100*hrs*sh];
+}
+function expRows(){
+  var b=exposure(slots.before),a=exposure(slots.after);
+  return EXPN.map(function(n,i){
+    var vb=b?b[i]:null,va=a?a[i]:null;
+    return {name:n,b:vb,a:va,d:(vb!=null&&va!=null)?Math.round(va)-Math.round(vb):null};
+  });
+}
+function renderExposure(){
+  $("expTbl").innerHTML='<tr><th>Показник</th><th>До</th><th>Після</th><th>Зміна</th></tr>'+expRows().map(function(r){
+    var cls=!r.d?"":r.d<0?"better":"worse";
+    return '<tr><td>'+r.name+'</td><td class="num">'+nf(r.b)+'</td><td class="num">'+nf(r.a)+'</td><td class="num '+cls+'">'+(r.d==null?"–":(r.d>0?"+":"")+nf(r.d))+'</td></tr>';
+  }).join("");
+}
+function verdict(){
+  var rb=slots.before.reba,ra=slots.after.reba;if(!rb||!ra)return null;
+  var tb=rb.peak.total,ta=ra.peak.total,lb=rebaLevel(tb)[0].toLowerCase(),la=rebaLevel(ta)[0].toLowerCase();
+  var head=ta<tb?(lb===la?"Бал знизився на "+(tb-ta)+", рівень той самий: "+la:"Ризик знизився: "+lb+" → "+la):ta>tb?(lb===la?"Бал зріс на "+(ta-tb)+", рівень той самий: "+la:"Ризик зріс: "+lb+" → "+la):"Бал REBA не змінився: "+la;
+  var sb=slots.before.stats.trunk,sa=slots.after.stats.trunk;
+  var det=(sb&&sa?"Пік нахилу тулуба: "+fmt(sb.peak)+"° → "+fmt(sa.peak)+"°. ":"")+"Час у позах із балом 8 і вище: "+fmt(rb.pct[2])+"% → "+fmt(ra.pct[2])+"%.";
+  return {tb:tb,ta:ta,head:head,det:det};
+}
+function cmpRows(){
+  var b=slots.before.stats,a=slots.after.stats,rows=[];
+  var add=function(name,vb,va,unit,d,neutral){rows.push({name:name,b:vb,a:va,unit:unit,d:d||0,neutral:!!neutral})};
+  var rb=slots.before.reba,ra=slots.after.reba;
+  add("REBA, найгірша поза",rb&&rb.peak.total,ra&&ra.peak.total,"");
+  add("REBA, середній",rb&&rb.avg,ra&&ra.avg,"",1);
+  add("Тулуб, пік",b.trunk&&b.trunk.peak,a.trunk&&a.trunk.peak,"°");
+  add("Тулуб, середній",b.trunk&&b.trunk.avg,a.trunk&&a.trunk.avg,"°");
+  add("Тулуб, час у червоній зоні",b.trunk&&b.trunk.pct[2],a.trunk&&a.trunk.pct[2],"%");
+  add("Тулуб, час поза зеленою",b.trunk&&(100-b.trunk.pct[0]),a.trunk&&(100-a.trunk.pct[0]),"%");
+  add("Шия, пік",b.neck&&b.neck.peak,a.neck&&a.neck.peak,"°");
+  add("Плече, пік",b.arm&&b.arm.peak,a.arm&&a.arm.peak,"°");
+  add("Коліно, пік",b.knee&&b.knee.peak,a.knee&&a.knee.peak,"°");
+  var cb=slots.before.cycles,ca=slots.after.cycles;
+  add("Середній цикл",cb&&cb.mean,ca&&ca.mean," с",1);
+  add("Повторів за хвилину",cb&&cb.rpm,ca&&ca.rpm,"",1,true);
+  return rows;
+}
+function rebaInfo(slot){
+  var R=slot.reba;if(!R)return null;
+  var p=R.peak,lv=rebaLevel(p.total),a=p.a,d=[];
+  if(p.trunk>=3)d.push("тулуб "+fmt(a.trunk)+"° ("+p.trunk+" б.)");
+  if(p.ua>=3)d.push("плече "+fmt(a.arm)+"° ("+p.ua+" б.)");
+  if(p.neck>=2)d.push("шия "+fmt(a.neck)+"° ("+p.neck+" б.)");
+  if(p.legs>=2)d.push("ноги ("+p.legs+" б.)");
+  if(p.load>=1)d.push("вантаж (+"+p.load+")");
+  if(p.coupling>=1)d.push("захват (+"+p.coupling+")");
+  if(p.act>=1)d.push("активність (+"+p.act+")");
+  return {level:lv[0]+" (рівень "+(p.total<=1?0:p.total<=3?1:p.total<=7?2:p.total<=10?3:4)+")",
+    text:lv[1]+" Оцінено найгіршу позу циклу, "+R.peakT.toFixed(1)+" с. Середній бал за цикл "+R.avg.toFixed(1)+".",
+    drivers:d.length?"Найбільший внесок: "+d.join(", ")+".":"Жоден компонент не виходить за нейтральні межі."};
+}
+function renderBoth(){
+  var pb=slots.before.reba&&slots.before.reba.peak,pa=slots.after.reba&&slots.after.reba.peak;
+  var cell=function(p,ak,sk,plus){if(!p)return "–";var sc=p[sk];return (ak&&p.a[ak]!=null?fmt(p.a[ak])+"° · ":"")+(plus?"+":"")+sc};
+  var row=function(n,ak,sk,plus,cls){return '<tr'+(cls?' class="'+cls+'"':'')+'><td>'+n+'</td><td class="num">'+cell(pb,ak,sk,plus)+'</td><td class="num">'+cell(pa,ak,sk,plus)+'</td></tr>'};
+  $("bothTbl").innerHTML='<tr><th>Компонент: кут · бал</th><th>До</th><th>Після</th></tr>'+
+    row("Тулуб","trunk","trunk")+row("Шия","neck","neck")+row("Ноги","knee","legs")+row("Таблиця A",null,"tA")+row("Вантаж",null,"load",true)+row("Бал A",null,"A",false,"sub")+
+    row("Плече","arm","ua")+row("Передпліччя","elbow","la")+row("Зап'ястя",null,"wrist")+row("Таблиця B",null,"tB")+row("Захват",null,"coupling",true)+row("Бал B",null,"B",false,"sub")+
+    row("Таблиця C",null,"C")+row("Активність",null,"act",true)+row("REBA",null,"total",false,"total");
+  $("bothConcl").innerHTML=["before","after"].map(function(k){
+    var sl=slots[k],inf=rebaInfo(sl),ad=advice(sl);
+    var h='<div class="concl"><h3>'+LABEL[k]+(sl.demo?" (приклад)":sl.name?": "+sl.name:"")+'</h3>';
+    if(!inf)return h+'<p class="small">Немає даних: на відео не знайдено кадрів, де видно тулуб.</p></div>';
+    var t=sl.reba.peak.total;
+    h+='<div class="row"><div class="score p'+rebaBand(t)+'">'+t+'</div><div class="col"><b>'+inf.level+'</b><p class="small">'+inf.text+'</p></div></div>';
+    h+='<p class="small">'+inf.drivers+'</p>';
+    h+='<b>Ризики</b><ul class="items">'+ad.risks.map(function(r){return '<li><span class="pill p'+r.l+'">'+LV[r.l]+'</span><span><b>'+r.t+'.</b> '+r.x+'</span></li>'}).join("")+'</ul>';
+    h+='<b>Рекомендації</b><ol class="items">'+ad.recs.map(function(r,i){return '<li><span class="n">'+(i+1)+'</span><span>'+r.x+'<span class="kind">'+r.k+(r.l===2?", першочергова":"")+'</span></span></li>'}).join("")+'</ol>';
+    return h+'</div>';
+  }).join("");
+}
+function riskDiff(){
+  var t=function(sl){var ad=advice(sl),o=[];if(ad)ad.risks.forEach(function(r){if(r.l>0&&o.indexOf(r.t)<0)o.push(r.t)});return o};
+  var b=t(slots.before),a=t(slots.after);
+  return {gone:b.filter(function(x){return a.indexOf(x)<0}),kept:b.filter(function(x){return a.indexOf(x)>=0}),fresh:a.filter(function(x){return b.indexOf(x)<0})};
+}
+function renderCmp(){
+  var h='<tr><th>Показник</th><th>До</th><th>Після</th><th>Зміна</th></tr>';
+  cmpRows().forEach(function(r){
+    var d=(r.b!=null&&r.a!=null)?r.a-r.b:null;
+    var cls=r.neutral||d==null||Math.abs(d)<(r.d?0.05:0.5)?"":d<0?"better":"worse";
+    h+='<tr><td>'+r.name+'</td><td class="num">'+fmt(r.b,r.d)+r.unit+'</td><td class="num">'+fmt(r.a,r.d)+r.unit+'</td><td class="num '+cls+'">'+(d==null?"–":(d>0?"+":"")+d.toFixed(r.d)+r.unit)+'</td></tr>';
+  });
+  $("cmp").innerHTML=h;
+  var vd=verdict();
+  if(vd){
+    $("cmpVerdict").innerHTML='<span class="score p'+rebaBand(vd.tb)+'">'+vd.tb+'</span><span class="arrow" aria-hidden="true">→</span><span class="score p'+rebaBand(vd.ta)+'">'+vd.ta+'</span><div class="col"><b>'+vd.head+'</b><p class="small">'+vd.det+'</p></div>';
+    var d=riskDiff(),li=function(c,l,arr){return arr.length?'<li><span class="pill p'+c+'">'+l+'</span><span>'+arr.join(", ")+'</span></li>':''};
+    $("cmpRisks").innerHTML=li(0,"Усунено",d.gone)+li(1,"Залишилось",d.kept)+li(2,"Нове",d.fresh);
+  }else{$("cmpVerdict").innerHTML="";$("cmpRisks").innerHTML=""}
+  var db=slots.before.demo,da=slots.after.demo;
+  $("cmpNote").textContent=db&&da?"Зараз показано приклад. Завантажте власні відео «До» і «Після», щоб порівняти реальні операції.":
+    db?"Стовпець «До» поки що з прикладу. Завантажте відео «До».":da?"Стовпець «Після» поки що з прикладу. Завантажте відео «Після».":"Від'ємна зміна означає менше навантаження.";
+}
+function summaryText(){
+  var out=["Аналіз робочої пози (кути у градусах, 2D-оцінка за відео)"];
+  ["before","after"].forEach(function(k){
+    var s=slots[k];out.push("");out.push(LABEL[k]+(s.demo?" (приклад)":s.name?" ("+s.name+")":"")+":");
+    if(s.reba){var p=s.reba.peak;out.push("  REBA: "+p.total+" ("+rebaLevel(p.total)[0].toLowerCase()+"), найгірша поза на "+s.reba.peakT.toFixed(1)+" с; бал A "+p.A+", бал B "+p.B+", таблиця C "+p.C+", активність +"+p.act+"; середній за цикл "+s.reba.avg.toFixed(1))}
+    KEYS.forEach(function(j){var st=s.stats[j];out.push("  "+J[j].name+": "+(st?"середній "+fmt(st.avg)+"°, пік "+fmt(st.peak)+"°, зелена/жовта/червона "+fmt(st.pct[0])+"/"+fmt(st.pct[1])+"/"+fmt(st.pct[2])+"%":"не видно"))});
+    var cy=s.cycles;
+    if(cy&&cy.mean)out.push("  Цикли: "+cy.n+" повторів, середній цикл "+fmt(cy.mean,1)+" с, найкращий "+fmt(cy.min,1)+" с, "+fmt(cy.rpm,1)+" повторів за хвилину");
+    out.push("  Індекс навантаження (0–100): "+regions(s).map(function(r){return r.name.toLowerCase()+" "+(r.idx==null?"–":fmt(r.idx))}).join(", "));
+    var ex=exposure(s);
+    if(ex)out.push("  За зміну ("+expInputs()[0]+" год): у позах REBA 8+ "+nf(ex[0])+" хв, глибоких нахилів "+nf(ex[2])+"; за рік у позах REBA 8+ "+nf(ex[3])+" год");
+    var ad=advice(s);
+    if(ad){out.push("  Ризики:");ad.risks.forEach(function(r){out.push("   - ["+LV[r.l]+"] "+r.t+". "+r.x)});
+      out.push("  Рекомендації:");ad.recs.forEach(function(r,i){out.push("   "+(i+1)+". "+r.x+" ("+r.k.toLowerCase()+")")})}
+  });
+  var rb=slots.before.reba,ra=slots.after.reba;
+  if(rb&&ra){var d=riskDiff();out.push("");out.push("Порівняння: REBA "+rb.peak.total+" → "+ra.peak.total+" ("+rebaLevel(rb.peak.total)[0].toLowerCase()+" → "+rebaLevel(ra.peak.total)[0].toLowerCase()+")");
+    if(d.gone.length)out.push("  Усунено: "+d.gone.join(", "));if(d.kept.length)out.push("  Залишилось: "+d.kept.join(", "));if(d.fresh.length)out.push("  Нове: "+d.fresh.join(", "))}
+  return out.join("\n");
+}
+function syncPlayBtn(){$("play").textContent=playing?"❚❚":"▶";$("play").setAttribute("aria-label",playing?"Пауза":"Відтворити")}
+function renderAll(){
+  $("tab-before").setAttribute("aria-pressed",!both&&cur==="before");$("tab-after").setAttribute("aria-pressed",!both&&cur==="after");$("tab-both").setAttribute("aria-pressed",both);
+  document.querySelector("main").classList.toggle("both",both);$("pick").hidden=both;$("shoot").hidden=both;$("fileRow").hidden=both;
+  $("fileLabel").textContent="Обрати відео «"+LABEL[cur]+"»";
+  $("demoTag").hidden=!active().some(function(sl){return sl.demo});
+  syncPlayBtn();renderSummary();renderReba();renderAdvice();renderBody();renderCycles();renderJoints();renderCmp();renderExposure();renderBoth();$("pdfBtn").textContent=both?"Звіт PDF: до і після":"Звіт PDF: "+LABEL[cur];drawView();drawChart();
+}
+
+/* ---------- before/after card ---------- */
+var SOFT=["#dff3e7","#fbefcc","#fbdfe0"],cardBlob=null,cardUrl=null,cardChain=Promise.resolve();
+function wrapText(c,text,x,y,maxW,lh,maxLines){
+  var words=String(text).split(" "),line="",n=0;
+  for(var i=0;i<words.length;i++){
+    var test=line?line+" "+words[i]:words[i];
+    if(c.measureText(test).width>maxW&&line){
+      n++;
+      if(n===maxLines){while(c.measureText(line+"…").width>maxW&&line.length>1)line=line.slice(0,-1);c.fillText(line+"…",x,y);return y+lh}
+      c.fillText(line,x,y);y+=lh;line=words[i];
+    }else line=test;
+  }
+  if(line){
+    if(c.measureText(line).width>maxW){while(c.measureText(line+"…").width>maxW&&line.length>1)line=line.slice(0,-1);line+="…"}
+    c.fillText(line,x,y);y+=lh;
+  }
+  return y;
+}
+function scoreBox(c,x,y,sz,total){
+  c.fillStyle=total==null?"#e9edf1":SOFT[rebaBand(total)];rrect(c,x,y,sz,sz,sz*0.14);
+  c.fillStyle="#18212b";c.font="500 "+Math.round(sz*0.54)+"px 'IBM Plex Mono', monospace";c.textAlign="center";c.textBaseline="middle";
+  c.fillText(total==null?"–":String(total),x+sz/2,y+sz/2+sz*0.03);c.textAlign="left";c.textBaseline="alphabetic";
+}
+async function seekTo(v,t){if(Math.abs(v.currentTime-t)<0.02)return;v.currentTime=t;await once(v,"seeked",3000)}
+async function peakShot(slot,key){
+  var t=slot.reba?slot.reba.peakT:0;
+  if(slot.shot&&slot.shot.t===t&&slot.shot.blur===blurOn)return slot.shot.cv;
+  var z=vsize(slot),sc=Math.min(1,640/Math.max(z[0],z[1])),W=Math.round(z[0]*sc),H=Math.round(z[1]*sc);
+  var cv=document.createElement("canvas");cv.width=W;cv.height=H;var ctx=cv.getContext("2d");
+  if(slot.video){
+    var v=slot.video,back=v.currentTime;
+    grabbing=true;
+    try{v.pause();await seekTo(v,Math.min(t,slot.duration-0.01));drawSlot(ctx,slot,key,W,H,false,t,v);await seekTo(v,back)}
+    finally{grabbing=false}
+  }else drawSlot(ctx,slot,key,W,H,false,t,null);
+  slot.shot={t:t,blur:blurOn,cv:cv};
+  return cv;
+}
+function serial(fn){var p=cardChain.then(fn,fn);cardChain=p.catch(function(){});return p}
+function buildCard(){return serial(doCard)}
+async function doCard(){
+  var st=$("cardStatus");st.textContent="Формую картку…";
+  try{
+    if(document.fonts&&document.fonts.ready){try{await document.fonts.ready}catch(e){}}
+    var keys=["before","after"],shots=[],i;
+    for(i=0;i<2;i++)shots.push(await peakShot(slots[keys[i]],keys[i]));
+    var W=1600,H=1070,cv=document.createElement("canvas");cv.width=W;cv.height=H;
+    var c=cv.getContext("2d"),INK="#18212b",MUT="#5b6876",SANS="'IBM Plex Sans', system-ui, sans-serif",COND="'IBM Plex Sans Condensed', 'Arial Narrow', sans-serif";
+    c.fillStyle="#ffffff";c.fillRect(0,0,W,H);c.textAlign="left";c.textBaseline="alphabetic";
+    c.fillStyle=INK;c.font="600 46px "+COND;c.fillText("Ергономічна оцінка: до і після",48,78);
+    var op=$("opName").value.trim(),d=new Date(),ds=("0"+d.getDate()).slice(-2)+"."+("0"+(d.getMonth()+1)).slice(-2)+"."+d.getFullYear();
+    c.fillStyle=MUT;c.font="400 26px "+SANS;wrapText(c,(op?op+" · ":"")+ds+" · метод REBA, аналіз відео",48,120,1500,30,1);
+    keys.forEach(function(k,ix){
+      var sl=slots[k],px=48+ix*776,py=150,pw=728,ph=610;
+      c.fillStyle="#f3f5f7";rrect(c,px,py,pw,ph,18);
+      c.fillStyle=INK;c.font="600 30px "+COND;c.fillText(LABEL[k].toUpperCase()+(sl.demo?" · приклад":""),px+24,py+48);
+      var bx=px+24,by=py+70,bw=300,bh=516,im=shots[ix];
+      c.fillStyle="#10161d";rrect(c,bx,by,bw,bh,12);
+      var sc=Math.min(bw/im.width,bh/im.height),iw=im.width*sc,ih=im.height*sc;
+      c.drawImage(im,bx+(bw-iw)/2,by+(bh-ih)/2,iw,ih);
+      var x0=px+348,R=sl.reba,t=R?R.peak.total:null;
+      scoreBox(c,x0,by,112,t);
+      c.fillStyle=MUT;c.font="400 22px "+SANS;c.fillText("REBA, найгірша поза",x0+130,by+34);
+      c.fillStyle=INK;c.font="600 28px "+SANS;wrapText(c,t==null?"Немає даних":rebaLevel(t)[0],x0+130,by+74,230,32,2);
+      var my=by+166,T=sl.stats.trunk,cy=sl.cycles;
+      var metric=function(label,val){c.fillStyle=MUT;c.font="400 21px "+SANS;c.fillText(label,x0,my);c.fillStyle=INK;c.font="600 34px "+SANS;c.fillText(val,x0,my+38);my+=86};
+      metric("Пік нахилу тулуба",T?fmt(T.peak)+"°":"–");
+      metric("Час у позах 8+",R?fmt(R.pct[2])+"%":"–");
+      metric("Середній цикл",cy&&cy.mean?fmt(cy.mean,1)+" с":"–");
+      drawBody(c,sl,x0+240,by+146,260,"#d6dce3");
+      var ad=advice(sl),titles=[];if(ad)ad.risks.forEach(function(r){if(r.l>0&&titles.indexOf(r.t)<0)titles.push(r.t)});
+      c.fillStyle=MUT;c.font="400 21px "+SANS;c.fillText("Ризики",x0,by+446);
+      c.fillStyle=INK;c.font="500 23px "+SANS;wrapText(c,titles.length?titles.join(", "):"суттєвих не виявлено",x0,by+478,356,28,2);
+    });
+    var vd=verdict(),fy=800;
+    scoreBox(c,48,fy,96,vd?vd.tb:null);
+    c.fillStyle=MUT;c.font="400 44px "+SANS;c.fillText("→",158,fy+62);
+    scoreBox(c,214,fy,96,vd?vd.ta:null);
+    c.fillStyle=INK;c.font="600 34px "+SANS;wrapText(c,vd?vd.head:"Недостатньо даних для порівняння",340,fy+38,1210,40,1);
+    c.fillStyle=MUT;c.font="400 24px "+SANS;if(vd)wrapText(c,vd.det,340,fy+78,1210,30,1);
+    var df=riskDiff(),ly=fy+140;
+    var line=function(col,label,arr){
+      if(!arr.length)return;
+      c.fillStyle=col;c.beginPath();c.arc(58,ly-8,8,0,6.3);c.fill();
+      c.fillStyle=INK;c.font="600 24px "+SANS;c.fillText(label,78,ly);var lw=c.measureText(label).width;
+      c.font="400 24px "+SANS;wrapText(c,arr.join(", "),78+lw+12,ly,1462-lw,30,1);ly+=36;
+    };
+    line("#1f9d5b","Усунено:",df.gone);line("#c98a00","Залишилось:",df.kept);line("#d23b40","Нове:",df.fresh);
+    c.fillStyle=MUT;c.font="400 18px "+SANS;c.textAlign="right";c.fillText("Скринінг за відео (2D), не замінює огляд робочого місця",1552,1050);c.textAlign="left";
+    var blob=await new Promise(function(res){cv.toBlob(res,"image/png")});
+    if(!blob)throw new Error("порожнє зображення");
+    cardBlob=blob;if(cardUrl)URL.revokeObjectURL(cardUrl);cardUrl=URL.createObjectURL(blob);
+    $("cardImg").src=cardUrl;st.textContent="";
+  }catch(e){st.textContent="Не вдалося сформувати картку: "+(e&&e.message||e)}
+}
+async function saveFile(name,blob,st){
+  if(window.claude&&typeof window.claude.use==="function"){
+    var ns=null;
+    try{ns=await window.claude.use("downloads")}catch(e){}
+    if(!ns){st.textContent="Збереження файлів у цьому вікні недоступне. Відкрийте сторінку в Chrome або на комп'ютері.";return false}
+    try{await ns.save({filename:name,data:blob});st.textContent="Файл збережено: "+name;return true}
+    catch(e2){st.textContent=e2&&e2.code==="declined"?"Збереження скасовано.":"Не вдалося зберегти файл"+(e2&&e2.code?" ("+e2.code+")":"")+".";return false}
+  }
+  try{
+    var a=document.createElement("a"),u=URL.createObjectURL(blob);
+    a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();
+    setTimeout(function(){URL.revokeObjectURL(u)},60000);
+    st.textContent="Файл збережено: "+name;return true;
+  }catch(e3){st.textContent="Не вдалося зберегти файл.";return false}
+}
+function dStr(){var d=new Date();return ("0"+d.getDate()).slice(-2)+"."+("0"+(d.getMonth()+1)).slice(-2)+"."+d.getFullYear()}
+function dIso(){var d=new Date();return d.getFullYear()+"-"+("0"+(d.getMonth()+1)).slice(-2)+"-"+("0"+d.getDate()).slice(-2)}
+
+/* ---------- PDF report ---------- */
+function Rep(){
+  var PW=1654,PH=2339,M=120,INK="#18212b",MUT="#5b6876",LINE="#d6dce3";
+  var SANS="'IBM Plex Sans', system-ui, sans-serif",COND="'IBM Plex Sans Condensed', 'Arial Narrow', sans-serif",MONO="'IBM Plex Mono', monospace";
+  var R={pages:[],y:0,c:null,M:M,W:PW-2*M,PW:PW,PH:PH,INK:INK,MUT:MUT};
+  R.page=function(){
+    var cv=document.createElement("canvas");cv.width=PW;cv.height=PH;
+    var c=cv.getContext("2d");c.fillStyle="#ffffff";c.fillRect(0,0,PW,PH);c.textAlign="left";c.textBaseline="alphabetic";
+    R.pages.push(cv);R.c=c;R.y=M;
+  };
+  R.need=function(h){if(R.y+h>PH-M-40)R.page()};
+  R.font=function(sz,w,fam){R.c.font=(w||400)+" "+sz+"px "+(fam==="cond"?COND:fam==="mono"?MONO:SANS)};
+  R.lines=function(text,maxW){
+    var out=[],line="";
+    String(text).split(" ").forEach(function(wd){var t=line?line+" "+wd:wd;if(R.c.measureText(t).width>maxW&&line){out.push(line);line=wd}else line=t});
+    if(line)out.push(line);return out;
+  };
+  R.para=function(text,o){
+    o=o||{};var sz=o.size||29,lh=Math.round(sz*1.42),ind=o.indent||0;
+    R.font(sz,o.weight);
+    R.lines(text,R.W-ind).forEach(function(l){R.need(lh);R.font(sz,o.weight);R.c.fillStyle=o.color||INK;R.c.fillText(l,M+ind,R.y+sz);R.y+=lh});
+    R.y+=(o.after==null?12:o.after);
+  };
+  R.title=function(text,sub){
+    R.font(62,600,"cond");R.c.fillStyle=INK;R.c.fillText(text,M,R.y+58);R.y+=92;
+    R.font(31);R.c.fillStyle=MUT;R.lines(sub,R.W).slice(0,2).forEach(function(l){R.c.fillText(l,M,R.y+30);R.y+=44});
+    R.y+=14;
+  };
+  R.h2=function(text){
+    R.need(260);R.y+=22;R.font(44,600,"cond");R.c.fillStyle=INK;
+    var t=String(text);while(R.c.measureText(t).width>R.W&&t.length>1)t=t.slice(0,-2)+"…";
+    R.c.fillText(t,M,R.y+42);R.y+=62;R.c.fillStyle=INK;R.c.fillRect(M,R.y,R.W,3);R.y+=28;
+  };
+  R.h3=function(text,keep){R.need(66+Math.min(keep||130,PH-2*M-200));R.y+=14;R.font(32,600);R.c.fillStyle=INK;R.c.fillText(text,M,R.y+32);R.y+=52};
+  R.table=function(cols,rows,head){
+    var rh=46,xs=[],x=M,total=(rows.length+(head?1:0))*rh+18;
+    cols.forEach(function(cd){xs.push(x);x+=cd.w*R.W});
+    if(total<PH-2*M-100)R.need(total);
+    var draw=function(cells,isHead,bold){
+      R.need(rh);var c=R.c;
+      cells.forEach(function(txt,i){
+        var cw=cols[i].w*R.W,al=cols[i].align||"left";
+        R.font(isHead?22:26,isHead||bold?600:400,cols[i].mono&&!isHead?"mono":null);c.fillStyle=isHead?MUT:INK;
+        var t=String(txt);while(c.measureText(t).width>cw-16&&t.length>1)t=t.slice(0,-2)+"…";
+        c.textAlign=al;c.fillText(t,al==="right"?xs[i]+cw-8:xs[i]+8,R.y+32);c.textAlign="left";
+      });
+      c.fillStyle=LINE;c.fillRect(M,R.y+rh-2,R.W,isHead?3:1.5);R.y+=rh;
+    };
+    if(head)draw(head,true);
+    rows.forEach(function(r){draw(r.cells||r,false,r.bold)});
+    R.y+=18;
+  };
+  R.risk=function(lvl,title,text){
+    R.need(130);var c=R.c;
+    c.fillStyle=SOFT[lvl];rrect(c,M,R.y+2,150,40,20);
+    R.font(22,600);c.fillStyle=INK;c.textAlign="center";c.fillText(LV[lvl],M+75,R.y+30);c.textAlign="left";
+    R.font(29,600);c.fillText(title,M+176,R.y+32);R.y+=46;
+    R.para(text,{indent:176,size:27,after:16});
+  };
+  R.rec=function(n,text,kind){
+    R.need(120);var c=R.c;
+    c.strokeStyle=LINE;c.lineWidth=2;c.beginPath();c.arc(M+22,R.y+20,20,0,6.3);c.stroke();
+    R.font(22,500,"mono");c.fillStyle=INK;c.textAlign="center";c.fillText(String(n),M+22,R.y+28);c.textAlign="left";
+    R.para(text,{indent:64,size:27,after:0});
+    R.para(kind,{indent:64,size:22,color:MUT,after:16});
+  };
+  R.th=function(n){return (n+1)*46+18};
+  R.finish=function(label){
+    R.pages.forEach(function(cv,i){
+      var c=cv.getContext("2d");c.fillStyle=LINE;c.fillRect(M,PH-104,R.W,2);
+      c.font="400 22px "+SANS;c.fillStyle=MUT;c.textAlign="left";c.fillText(label,M,PH-66);
+      c.textAlign="right";c.fillText("стор. "+(i+1)+" з "+R.pages.length,PW-M,PH-66);c.textAlign="left";
+    });
+  };
+  return R;
+}
+var MNAME={shock:"ривок або різке зусилля",wristTwist:"зап'ястя скручене або відхилене",trunkTwist:"тулуб скручений або нахилений убік",neckTwist:"шия скручена або нахилена вбік",oneLeg:"опора на одну ногу",abduct:"плече відведене або ротоване",shoulderUp:"плече підняте",armSupport:"рука з опорою","static":"статична поза понад 1 хв",repeat:"повтори частіше 4 разів на хв",rapid:"різкі зміни пози"};
+function manualText(m){
+  var a=["вага "+["до 5 кг","5–10 кг","понад 10 кг"][m.load],"захват "+["добрий","задовільний","поганий","неприйнятний"][m.coupling],"зап'ястя "+(m.wrist>=2?"зігнуте понад 15°":"зігнуте до 15°")];
+  MCHK.forEach(function(k){if(m[k])a.push(MNAME[k])});
+  return "Введено вручну: "+a.join("; ")+".";
+}
+function repFrame(c,shot,x,y,bw,bh){
+  c.fillStyle="#e9edf1";rrect(c,x,y,bw,bh,14);
+  var sc=Math.min(bw/shot.width,bh/shot.height),iw=shot.width*sc,ih=shot.height*sc;
+  c.drawImage(shot,x+(bw-iw)/2,y+(bh-ih)/2,iw,ih);
+}
+function repVariant(R,key,shot,single){
+  var sl=slots[key],INK=R.INK,MUT=R.MUT;
+  R.h2(LABEL[key]+(sl.demo?" (приклад)":sl.name?": "+sl.name:""));
+  var bw=450,bh=600;R.need(bh+60);
+  var c=R.c,x=R.M,y=R.y;
+  repFrame(c,shot,x,y,bw,bh);
+  var x0=x+bw+50,rw=R.W-bw-50,inf=rebaInfo(sl),t=sl.reba?sl.reba.peak.total:null;
+  scoreBox(c,x0,y,130,t);
+  c.fillStyle=MUT;R.font(26);c.fillText("REBA, найгірша поза",x0+158,y+44);
+  c.fillStyle=INK;R.font(40,600);c.fillText(t==null?"Немає даних":rebaLevel(t)[0],x0+158,y+100);
+  var ty=y+166;
+  if(inf){[inf.text,inf.drivers].forEach(function(tx){R.font(27);c.fillStyle=INK;R.lines(tx,rw).forEach(function(l){c.fillText(l,x0,ty+27);ty+=38});ty+=10})}
+  var bodyH=Math.max(170,Math.min(280,y+bh-ty-16));
+  drawBody(c,sl,x0,ty+8,bodyH,"#d6dce3");
+  var lx=x0+bodyH*0.42+44,ly=ty+34;
+  c.fillStyle=MUT;R.font(23);c.fillText("Індекс навантаження, 0–100",lx,ly);ly+=44;
+  regions(sl).forEach(function(r){
+    c.fillStyle=heat(r.idx)||"#d6dce3";rrect(c,lx,ly-20,22,22,5);
+    c.fillStyle=INK;R.font(27);c.fillText(r.name+": "+(r.idx==null?"не видно":fmt(r.idx)+", "+idxBand(r.idx)),lx+34,ly);ly+=38;
+  });
+  R.y=Math.max(y+bh,ly,ty+8+bodyH)+28;
+  if(!sl.reba){R.para("На відео не знайдено кадрів, де видно тулуб, тому оцінка неможлива.");return}
+  var p=sl.reba.peak,a=p.a,dg=function(v){return v==null?"":fmt(v)+"°"};
+  R.h3("Розкладка REBA для найгіршої пози",R.th(15));
+  R.table([{w:0.5},{w:0.25,align:"right",mono:true},{w:0.25,align:"right",mono:true}],[
+    ["Тулуб",dg(a.trunk),p.trunk],["Шия",dg(a.neck),p.neck],["Ноги (згин коліна)",dg(a.knee),p.legs],["Таблиця A","",p.tA],["Вантаж","","+"+p.load],{cells:["Бал A","",p.A],bold:true},
+    ["Плече",dg(a.arm),p.ua],["Передпліччя (кут у лікті)",dg(a.elbow),p.la],["Зап'ястя","",p.wrist],["Таблиця B","",p.tB],["Захват","","+"+p.coupling],{cells:["Бал B","",p.B],bold:true},
+    ["Таблиця C","",p.C],["Активність","","+"+p.act],{cells:["Підсумковий бал REBA","",p.total],bold:true}
+  ],["Компонент","Кут","Бал"]);
+  R.para(manualText(sl.manual),{size:25,color:MUT});
+  R.h3("Кути суглобів за весь запис",R.th(KEYS.length));
+  var num={align:"right",mono:true};
+  R.table([{w:0.25},Object.assign({w:0.15},num),Object.assign({w:0.15},num),Object.assign({w:0.15},num),Object.assign({w:0.15},num),Object.assign({w:0.15},num)],
+    KEYS.map(function(k){var st=sl.stats[k];return st?[J[k].name,fmt(st.avg)+"°",fmt(st.peak)+"°",fmt(st.pct[0])+"%",fmt(st.pct[1])+"%",fmt(st.pct[2])+"%"]:[J[k].name,"–","–","–","–","–"]}),
+    ["Суглоб","Середній","Пік","Зелена зона","Жовта зона","Червона зона"]);
+  var cy=sl.cycles;
+  R.h3("Цикли");
+  R.para(cy&&cy.mean?"Повторів: "+cy.n+". Середній цикл "+fmt(cy.mean,1)+" с, найкращий "+fmt(cy.min,1)+" с, найдовший "+fmt(cy.max,1)+" с. Темп "+fmt(cy.rpm,1)+" повторів за хвилину. Цикли визначено за рухом: "+CYCNAME[cy.key]+".":"Повторюваний рух на відео не знайдено або повторів менше двох.");
+  if(single){
+    var ex=exposure(sl),io=expInputs();
+    if(ex){
+      R.h3("Навантаження за зміну і рік",R.th(EXPN.length));
+      R.table([{w:0.7},{w:0.3,align:"right",mono:true}],EXPN.map(function(n,i){return [n,nf(ex[i])]}),["Показник ("+io[0]+" год за зміну, "+io[1]+" змін на рік)","Значення"]);
+    }
+  }
+  var ad=advice(sl);
+  if(ad){
+    R.h3("Ризики");ad.risks.forEach(function(r){R.risk(r.l,r.t,r.x)});
+    R.h3("Рекомендації");ad.recs.forEach(function(r,i){R.rec(i+1,r.x,r.k+(r.l===2?", першочергова":""))});
+  }
+}
+async function buildReport(){
+  if(document.fonts&&document.fonts.ready){try{await document.fonts.ready}catch(e){}}
+  var keys=both?["before","after"]:[cur],shots={},i;
+  for(i=0;i<keys.length;i++)shots[keys[i]]=await peakShot(slots[keys[i]],keys[i]);
+  var R=Rep();R.page();
+  var op=$("opName").value.trim(),ds=dStr(),c;
+  R.title("Звіт з ергономічної оцінки",(op?op+" · ":"")+ds);
+  R.para("Метод: REBA за відео робочої операції, двовимірний аналіз пози. "+(both?"Порівняння стану до і після змін.":"Оцінка варіанта «"+LABEL[cur]+"»."),{size:27,color:R.MUT});
+  if(both){
+    R.h2("Підсумок");
+    var vd=verdict();
+    R.need(170);c=R.c;
+    scoreBox(c,R.M,R.y,130,vd?vd.tb:null);
+    c.fillStyle=R.MUT;R.font(54);c.fillText("→",R.M+150,R.y+84);
+    scoreBox(c,R.M+226,R.y,130,vd?vd.ta:null);
+    c.fillStyle=R.INK;R.font(36,600);
+    var hx=R.M+396,hy=R.y+44;
+    R.lines(vd?vd.head:"Недостатньо даних для порівняння",R.W-396).slice(0,2).forEach(function(l){c.fillText(l,hx,hy);hy+=46});
+    if(vd){R.font(26);c.fillStyle=R.MUT;R.lines(vd.det,R.W-396).slice(0,2).forEach(function(l){c.fillText(l,hx,hy-4);hy+=36})}
+    R.y+=Math.max(150,hy-R.y)+20;
+    var fw=(R.W-40)/2,fh=600;R.need(fh+70);c=R.c;
+    keys.forEach(function(k,ix){
+      var fx=R.M+ix*(fw+40),sl=slots[k];
+      c.fillStyle=R.INK;R.font(29,600);c.fillText(LABEL[k]+(sl.demo?" (приклад)":"")+(sl.reba?" · REBA "+sl.reba.peak.total:""),fx,R.y+30);
+      repFrame(c,shots[k],fx,R.y+48,fw,fh);
+    });
+    R.y+=fh+76;
+    R.h3("Показники",R.th(13));
+    R.table([{w:0.46},{w:0.18,align:"right",mono:true},{w:0.18,align:"right",mono:true},{w:0.18,align:"right",mono:true}],cmpRows().map(function(r){
+      var d=(r.b!=null&&r.a!=null)?r.a-r.b:null;
+      return [r.name,fmt(r.b,r.d)+r.unit,fmt(r.a,r.d)+r.unit,d==null?"–":(d>0?"+":"")+d.toFixed(r.d)+r.unit];
+    }),["Показник","До","Після","Зміна"]);
+    R.page();
+    var df=riskDiff();
+    R.h3("Що сталося з ризиками");
+    if(df.gone.length)R.para("Усунено: "+df.gone.join(", ")+".");
+    if(df.kept.length)R.para("Залишилось: "+df.kept.join(", ")+".");
+    if(df.fresh.length)R.para("Нове: "+df.fresh.join(", ")+".");
+    if(!df.gone.length&&!df.kept.length&&!df.fresh.length)R.para("Суттєвих ризиків не виявлено в жодному варіанті.");
+    var io=expInputs();
+    R.h3("Навантаження за зміну і рік",R.th(EXPN.length));
+    R.table([{w:0.46},{w:0.18,align:"right",mono:true},{w:0.18,align:"right",mono:true},{w:0.18,align:"right",mono:true}],expRows().map(function(r){
+      return [r.name,nf(r.b),nf(r.a),r.d==null?"–":(r.d>0?"+":"")+nf(r.d)];
+    }),["Показник","До","Після","Зміна"]);
+    R.para("Розрахунок для "+io[0]+" год на операції за зміну і "+io[1]+" змін на рік. Припущення: відео показує типовий цикл, операція триває вказаний час без перерв.",{size:24,color:R.MUT,after:20});
+    var pb=slots.before.reba&&slots.before.reba.peak,pa=slots.after.reba&&slots.after.reba.peak;
+    var cell=function(pk,ak,sk,plus){if(!pk)return "–";return (ak&&pk.a[ak]!=null?fmt(pk.a[ak])+"° · ":"")+(plus?"+":"")+pk[sk]};
+    R.h3("Розкладка REBA для найгірших поз",R.th(15));
+    R.table([{w:0.5},{w:0.25,align:"right",mono:true},{w:0.25,align:"right",mono:true}],[
+      ["Тулуб","trunk","trunk"],["Шия","neck","neck"],["Ноги","knee","legs"],["Таблиця A",null,"tA"],["Вантаж",null,"load",1],["Бал A",null,"A",0,1],
+      ["Плече","arm","ua"],["Передпліччя","elbow","la"],["Зап'ястя",null,"wrist"],["Таблиця B",null,"tB"],["Захват",null,"coupling",1],["Бал B",null,"B",0,1],
+      ["Таблиця C",null,"C"],["Активність",null,"act",1],["Підсумковий бал REBA",null,"total",0,1]
+    ].map(function(r){return {cells:[r[0],cell(pb,r[1],r[2],r[3]),cell(pa,r[1],r[2],r[3])],bold:!!r[4]}}),["Компонент: кут · бал","До","Після"]);
+  }
+  keys.forEach(function(k){if(both)R.page();repVariant(R,k,shots[k],!both)});
+  R.h2("Метод і обмеження");
+  Array.prototype.forEach.call(document.querySelectorAll("ul.notes li"),function(li){R.para("• "+li.textContent.trim(),{size:25,after:10})});
+  R.para("Звіт сформовано автоматично як скринінг. Остаточне рішення приймається після огляду робочого місця фахівцем.",{size:25,color:R.MUT});
+  R.finish("Аналізатор робочої пози · "+ds);
+  var imgs=[];
+  for(i=0;i<R.pages.length;i++){
+    var cv=R.pages[i],bl=await new Promise(function(res){cv.toBlob(res,"image/jpeg",0.9)});
+    if(!bl)throw new Error("не вдалося закодувати сторінку");
+    imgs.push({data:new Uint8Array(await bl.arrayBuffer()),w:cv.width,h:cv.height});
+    cv.width=cv.height=1;
+  }
+  return makePdf(imgs);
+}
+function makePdf(imgs){
+  var enc=new TextEncoder(),parts=[],offs=[],len=0,n=imgs.length,PWt=595.28,PHt=841.89;
+  var push=function(x){var b=typeof x==="string"?enc.encode(x):x;parts.push(b);len+=b.length};
+  var obj=function(id,str){offs[id]=len;push(id+" 0 obj\n"+str+"\nendobj\n")};
+  push("%PDF-1.4\n%âãÏÓ\n");
+  var kids=[],i;for(i=0;i<n;i++)kids.push((3+i*3)+" 0 R");
+  obj(1,"<< /Type /Catalog /Pages 2 0 R >>");
+  obj(2,"<< /Type /Pages /Kids ["+kids.join(" ")+"] /Count "+n+" >>");
+  imgs.forEach(function(im,ix){
+    var pg=3+ix*3,ct=pg+1,xo=pg+2,cs="q "+PWt+" 0 0 "+PHt+" 0 0 cm /Im0 Do Q";
+    obj(pg,"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 "+PWt+" "+PHt+"] /Resources << /XObject << /Im0 "+xo+" 0 R >> >> /Contents "+ct+" 0 R >>");
+    obj(ct,"<< /Length "+cs.length+" >>\nstream\n"+cs+"\nendstream");
+    offs[xo]=len;
+    push(xo+" 0 obj\n<< /Type /XObject /Subtype /Image /Width "+im.w+" /Height "+im.h+" /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length "+im.data.length+" >>\nstream\n");
+    push(im.data);push("\nendstream\nendobj\n");
+  });
+  var total=3+n*3,xref=len,x="xref\n0 "+total+"\n0000000000 65535 f \n";
+  for(i=1;i<total;i++)x+=("0000000000"+offs[i]).slice(-10)+" 00000 n \n";
+  push(x+"trailer\n<< /Size "+total+" /Root 1 0 R >>\nstartxref\n"+xref+"\n%%EOF\n");
+  return new Blob(parts,{type:"application/pdf"});
+}
+
+/* ---------- video recording ---------- */
+var rec=null,recBlob=null,recUrl=null,recExt="webm";
+async function startRec(){
+  var cv=$("view"),st=$("outStatus");
+  if(!cv.captureStream||!window.MediaRecorder){st.textContent="Цей браузер не вміє записувати відео зі сторінки. Спробуйте Chrome.";return}
+  var mime=null;
+  ["video/mp4;codecs=avc1.42E01E","video/mp4","video/webm;codecs=vp9","video/webm;codecs=vp8","video/webm"].forEach(function(t){if(!mime&&MediaRecorder.isTypeSupported(t))mime=t});
+  if(!mime){st.textContent="Цей браузер не підтримує жоден формат запису відео.";return}
+  pauseAll();
+  var list=active(),i;
+  for(i=0;i<list.length;i++){if(list[i].video)await seekTo(list[i].video,0);else list[i].t=0}
+  drawView();
+  var stream=cv.captureStream(30),chunks=[],r;
+  try{r=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:5000000})}
+  catch(e){st.textContent="Не вдалося почати запис: "+(e&&e.message||e);return}
+  recExt=mime.indexOf("mp4")>=0?"mp4":"webm";
+  r.ondataavailable=function(e){if(e.data&&e.data.size)chunks.push(e.data)};
+  r.onstop=function(){
+    stream.getTracks().forEach(function(tr){tr.stop()});
+    rec=null;$("recBtn").textContent="Записати відео зі скелетом";
+    recBlob=new Blob(chunks,{type:mime.split(";")[0]});
+    if(!recBlob.size){st.textContent="Запис вийшов порожнім. Спробуйте ще раз у Chrome.";return}
+    if(recUrl)URL.revokeObjectURL(recUrl);recUrl=URL.createObjectURL(recBlob);
+    $("recVideo").src=recUrl;$("recOut").hidden=false;
+    st.textContent="Відео готове: "+(recBlob.size/1048576).toFixed(1)+" МБ, формат "+recExt.toUpperCase()+".";
+  };
+  rec=r;r.start(500);
+  $("recBtn").textContent="Зупинити запис";st.textContent="Записую. Не закривайте сторінку до кінця відео.";
+  playing=true;lastTs=0;
+  list.forEach(function(sl){if(sl.video){var p=sl.video.play();if(p&&p.catch)p.catch(function(){})}});
+  syncPlayBtn();
+}
+
+/* ---------- controls ---------- */
+function pauseAll(){if(rec&&rec.state!=="inactive"){try{rec.stop()}catch(e){}}playing=false;["before","after"].forEach(function(k){if(slots[k].video)slots[k].video.pause()})}
+function switchTo(k){pauseAll();if(k==="both"){both=true}else{both=false;cur=k}renderAll();if(both)buildCard()}
+$("blur").addEventListener("change",function(e){blurOn=e.target.checked;if(both)buildCard()});
+$("cardMake").addEventListener("click",function(){pauseAll();syncPlayBtn();buildCard()});
+$("opName").addEventListener("change",function(){if(both)buildCard()});
+$("cardSave").addEventListener("click",function(){if(cardBlob)saveFile("reba-before-after-"+dIso()+".png",cardBlob,$("cardStatus"))});
+var repBusy=false;
+$("pdfBtn").addEventListener("click",function(){
+  if(repBusy)return;repBusy=true;
+  var st=$("outStatus");st.textContent="Формую звіт…";pauseAll();syncPlayBtn();
+  serial(buildReport).then(function(blob){return saveFile("reba-report-"+dIso()+".pdf",blob,st)},function(e){st.textContent="Не вдалося сформувати звіт: "+(e&&e.message||e)}).then(function(){repBusy=false});
+});
+$("recBtn").addEventListener("click",function(){if(rec){pauseAll();syncPlayBtn()}else startRec()});
+$("recSave").addEventListener("click",function(){if(recBlob)saveFile("reba-video-"+dIso()+"."+recExt,recBlob,$("outStatus"))});
+["expHours","expShifts"].forEach(function(id){$(id).addEventListener("input",renderExposure)});
+$("cycApply").addEventListener("click",function(){slots[cur].manual.repeat=true;applyReba(slots[cur]);renderAll()});
+$("tab-both").addEventListener("click",function(){switchTo("both")});
+$("tab-before").addEventListener("click",function(){switchTo("before")});
+$("tab-after").addEventListener("click",function(){switchTo("after")});
+$("pick").addEventListener("click",function(){var i=$("file");try{if(i.showPicker)i.showPicker();else i.click()}catch(e){try{i.click()}catch(e2){setStatus("Це вікно не дозволяє обирати файли. Відкрийте сторінку в Chrome.",true)}}});
+var stage=document.querySelector(".stage");
+["dragover","drop"].forEach(function(ev){stage.addEventListener(ev,function(e){e.preventDefault();if(ev==="drop"){var f=e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0];if(f){pauseAll();analyze(cur,f)}}})});
+$("shoot").addEventListener("click",function(){try{$("cam").click()}catch(e){setStatus("Це вікно не дозволяє відкрити камеру. Зніміть відео звичайною камерою й оберіть файл.",true)}});
+$("cam").addEventListener("change",function(e){var f=e.target.files&&e.target.files[0];e.target.value="";if(f){pauseAll();analyze(cur,f)}});
+$("file").addEventListener("change",function(e){var f=e.target.files&&e.target.files[0];e.target.value="";if(f){pauseAll();analyze(cur,f)}});
+$("play").addEventListener("click",function(){
+  var list=active();
+  if(playing){pauseAll()}
+  else{
+    if(list.every(atEnd))list.forEach(function(sl){setTime(sl,0)});
+    playing=true;lastTs=0;
+    list.forEach(function(sl){if(sl.video&&!atEnd(sl)){var p=sl.video.play();if(p&&p.catch)p.catch(function(){})}});
+  }
+  syncPlayBtn();
+});
+$("seek").addEventListener("input",function(e){
+  var f=e.target.value/1000;active().forEach(function(sl){setTime(sl,f*sl.duration)});
+});
+$("copy").addEventListener("click",function(){
+  var b=$("copy");
+  try{navigator.clipboard.writeText(summaryText()).then(function(){b.textContent="Скопійовано"},function(){b.textContent="Не вдалося скопіювати"})}
+  catch(e){b.textContent="Не вдалося скопіювати"}
+  setTimeout(function(){b.textContent="Копіювати підсумок"},1800);
+});
+function onManual(){
+  var m=slots[cur].manual;
+  MSEL.forEach(function(k){m[k]=parseInt($("m-"+k).value,10)||0});
+  MCHK.forEach(function(k){m[k]=$("m-"+k).checked});
+  applyReba(slots[cur]);renderAll();
+}
+MSEL.concat(MCHK).forEach(function(k){$("m-"+k).addEventListener("change",onManual)});
+$("rebaJump").addEventListener("click",function(){
+  var s=slots[cur];if(!s.reba)return;pauseAll();syncPlayBtn();
+  if(s.video)s.video.currentTime=Math.min(s.reba.peakT,s.duration-0.01);else s.t=s.reba.peakT;
+  document.querySelector(".stage").scrollIntoView({block:"center"});
+});
+var chips=$("chips");
+var CH=KEYS.concat(["reba"]);
+CH.forEach(function(k){
+  var b=document.createElement("button");b.type="button";b.id="chip-"+k;b.textContent=J[k].name;b.setAttribute("aria-pressed",k===chartKey);
+  b.addEventListener("click",function(){chartKey=k;CH.forEach(function(q){$("chip-"+q).setAttribute("aria-pressed",q===k)});drawChart()});
+  chips.appendChild(b);
+});
+function loop(ts){
+  var list=active();
+  if(playing){
+    list.forEach(function(sl){if(!sl.video&&lastTs){sl.t=Math.min(sl.duration,sl.t+(ts-lastTs)/1000)}});
+    if(list.every(function(sl){return atEnd(sl)||(sl.video&&sl.video.ended)})){pauseAll();syncPlayBtn()}
+  }
+  lastTs=ts;
+  if(!grabbing){drawView();drawChart()}
+  requestAnimationFrame(loop);
+}
+slots.before.t=peakTime(slots.before);slots.after.t=peakTime(slots.after);
+renderAll();
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(renderAll);
+window.addEventListener("resize",drawChart);
+requestAnimationFrame(loop);
+if("serviceWorker" in navigator&&(location.protocol==="https:"||location.hostname==="localhost")){
+  window.addEventListener("load",function(){try{navigator.serviceWorker.register("sw.js").catch(function(){})}catch(e){}});
+}
+})();
+</script>
+</body>
+</html>
