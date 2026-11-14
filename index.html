@@ -131,6 +131,11 @@ main.both #outSec{order:-1}
 .range input[type=text]{flex:0 1 92px;min-width:72px;min-height:38px;padding:6px 8px;font-family:var(--mono)}
 .range button{min-height:38px;padding:6px 10px;font-size:14px}
 .range label{font-size:14px;min-width:64px}
+.elbar{display:flex;height:22px;border-radius:5px;overflow:hidden;background:var(--line)}
+.elbar i{display:block;height:100%;min-width:2px;border-right:1px solid var(--panel)}
+.elbar .va{background:var(--ok)}.elbar .nn{background:var(--warn)}.elbar .w{background:var(--bad)}
+.xbtn{min-height:30px;padding:2px 9px;font-size:14px}
+.form input[type=text],.form select{width:100%}
 .fchips{display:flex;flex-wrap:wrap;gap:6px;font-size:13px;align-items:center}
 .fchips span{border:1px solid var(--line);border-radius:6px;padding:2px 7px;font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
 .fchips span.t{border:0;padding:2px 0;font-family:var(--body);color:var(--muted)}
@@ -250,6 +255,30 @@ input[type=text]{font:inherit;color:var(--ink);background:var(--panel);border:1p
   <p class="small">Список формується за правилами з кутів, часу в зонах і даних форми. Це скринінг: остаточне рішення приймайте після огляду робочого місця.</p>
 </section>
 
+<section class="panel per" aria-label="RULA">
+  <div class="row spread"><h2 id="rulaTitle">RULA: верхні кінцівки</h2><button id="rulaJump" type="button">Показати цей кадр</button></div>
+  <div class="row"><div id="rulaScore" class="score p0">–</div><div class="col"><b id="rulaLevel"></b><p id="rulaText" class="small"></p></div></div>
+  <div class="scroll"><table id="rulaTbl"></table></div>
+  <p class="small">RULA використовує ті самі кути та дані форми REBA. Сила й робота м'язів виводяться з ваги, ривків, статики та повторів. Скручування зап'ястя прийнято нейтральним.</p>
+</section>
+
+<section class="panel per" aria-label="NIOSH">
+  <div class="row spread"><h2 id="nioshTitle">NIOSH: підйом вантажу</h2><button id="n-est" type="button">Оцінити з відео</button></div>
+  <div class="form">
+    <label class="f" for="n-w">Вага вантажу, кг<input id="n-w" type="number" min="0" max="100" step="0.5" inputmode="decimal"></label>
+    <label class="f" for="n-H">Відстань рук від стоп по горизонталі, см<input id="n-H" type="number" min="0" max="100" step="1" inputmode="numeric"></label>
+    <label class="f" for="n-V">Висота рук на початку підйому, см<input id="n-V" type="number" min="0" max="200" step="1" inputmode="numeric"></label>
+    <label class="f" for="n-D">Вертикальне переміщення, см<input id="n-D" type="number" min="0" max="200" step="1" inputmode="numeric"></label>
+    <label class="f" for="n-A">Кут повороту тулуба, °<input id="n-A" type="number" min="0" max="180" step="5" inputmode="numeric"></label>
+    <label class="f" for="n-F">Підйомів за хвилину<input id="n-F" type="number" min="0" max="20" step="0.1" inputmode="decimal"></label>
+    <label class="f" for="n-dur">Тривалість роботи<select id="n-dur"><option value="0">до 1 години</option><option value="1">1–2 години</option><option value="2">2–8 годин</option></select></label>
+  </div>
+  <div class="row"><div id="nioshLI" class="score p0">–</div><div class="col"><b id="nioshLevel"></b><p id="nioshText" class="small"></p></div></div>
+  <div class="fchips" id="nioshMult"></div>
+  <p id="nioshStatus" class="small" role="status"></p>
+  <p class="small">Якість захвату береться з форми REBA. «Оцінити з відео» підставляє висоту, відстань і переміщення рук за зйомкою збоку та зростом із калібрування: це наближення, перевірте рулеткою.</p>
+</section>
+
 <section class="panel per" aria-label="Карта навантаження">
   <div class="row spread"><h2 id="bodyTitle">Карта навантаження</h2><span class="small">індекс 0–100</span></div>
   <div class="bodywrap"><canvas id="body" aria-label="Силует із зонами навантаження"></canvas><ul class="bodylist" id="bodyList"></ul></div>
@@ -267,6 +296,20 @@ input[type=text]{font:inherit;color:var(--ink);background:var(--panel);border:1p
   <p id="cycNote" class="small"></p>
   <p id="moveNote" class="small"></p>
   <div class="hint" id="cycHint" hidden><span id="cycHintText"></span><button id="cycApply" type="button">Позначити у формі REBA</button></div>
+</section>
+
+<section class="panel per" aria-label="Елементи операції">
+  <h2 id="elTitle">Елементи операції</h2>
+  <p class="small">Перемотайте відео на початок елемента, введіть назву і натисніть «Позначити початок тут». Елемент триває до наступної позначки або до кінця запису.</p>
+  <div class="form">
+    <label class="f" for="elName">Назва елемента<input id="elName" type="text" maxlength="40" list="elNames" placeholder="наприклад: взяти коробку" autocomplete="off"></label>
+    <label class="f" for="elClass">Тип<select id="elClass"><option value="va">додає цінність</option><option value="nn">необхідна без цінності</option><option value="w">втрата</option></select></label>
+  </div>
+  <datalist id="elNames"><option value="Підхід"><option value="Взяти"><option value="Перенести"><option value="Укласти"><option value="Повернення"><option value="Очікування"><option value="Контроль"></datalist>
+  <div class="row"><button id="elAdd" type="button" class="primary">Позначити початок тут</button><span id="elStatus" class="small" role="status"></span></div>
+  <div class="elbar" id="elBar" aria-hidden="true"></div>
+  <div class="scroll"><table id="elTbl"></table></div>
+  <p id="elSum" class="small"></p>
 </section>
 
 <section class="panel per" aria-label="Графік">
@@ -337,6 +380,16 @@ input[type=text]{font:inherit;color:var(--ink);background:var(--panel);border:1p
   <p class="small">На телефоні картку також можна зберегти, якщо утримувати палець на зображенні.</p>
 </section>
 
+<section class="panel" aria-label="Вид спереду">
+  <h2>Вид спереду: друга камера</h2>
+  <p class="small">Зйомка збоку не бачить бічних нахилів і відведення плечей. Завантажте відео тієї самої операції, зняте спереду: інструмент виміряє ці рухи й запропонує позначки для форми REBA. Скручування тулуба камера не бачить і тут.</p>
+  <div class="row"><input id="frontFile" type="file" accept="video/*" aria-label="Відео спереду"></div>
+  <progress id="frontProg" max="1" value="0" hidden></progress>
+  <p id="frontStatus" class="small" role="status"></p>
+  <div class="scroll"><table id="frontTbl"></table></div>
+  <div class="row" id="frontBtns" hidden><button id="frontToB" type="button">Перенести у форму «До»</button><button id="frontToA" type="button">Перенести у форму «Після»</button></div>
+</section>
+
 <section class="panel" aria-label="Калібрування">
   <h2>Калібрування</h2>
   <p class="small">Якщо в рівній стійці інструмент показує для шиї чи тулуба не 0°, введіть цей кут як поправку: він віднімається від усіх вимірювань. Зріст потрібен для оцінки переміщення в метрах. Значення зберігаються на цьому пристрої.</p>
@@ -364,6 +417,8 @@ input[type=text]{font:inherit;color:var(--ink);background:var(--panel);border:1p
     <li>Переміщення оцінюється за горизонтальним рухом таза в кадрі, масштаб береться зі зросту. Оцінка приблизна і має сенс лише при нерухомій камері.</li>
     <li>Для довгого відео задайте відрізок: аналізується лише він, і всі показники рахуються тільки для нього. Відео довше 2 хвилин не аналізується автоматично, доки ви не оберете відрізок або все відео.</li>
     <li>Якщо в кадрі кілька людей, натисніть «Обрати людину» й тицьніть на потрібну. Інструмент далі веде вікно навколо неї та аналізує лише його. Стеження може збитися, якщо люди перекривають одне одного або обрана людина надовго зникає з кадру.</li>
+    <li>RULA рахується за стандартними таблицями A, B і C для кожного кадру, висновок робиться за найгіршою позою. NIOSH: гранична вага RWL = 23 кг × шість множників (відстань, висота, переміщення, поворот, частота, захват), індекс підйому LI = вага / RWL.</li>
+    <li>Елементи операції розмічаються вручну. Для кожного рахуються тривалість і бали REBA лише за його кадрами.</li>
     <li>Знімайте збоку, перпендикулярно до руху, щоб людина була в кадрі на повний зріст. Це 2D-оцінка: скручування тулуба і вагу вантажу вона не бачить, тому ці пункти позначте у формі під висновком REBA.</li>
   </ul>
 </section>
@@ -447,7 +502,7 @@ function motion(slot){
     var dx=Math.abs(pts[i][0]-pts[i-1][0])*mpp;
     if(dx/slot.step>0.3){dist+=dx;mov++}
   }
-  return {dist:dist,pct:valid?mov/valid*100:0,dur:valid*slot.step,path:pts};
+  return {dist:dist,pct:valid?mov/valid*100:0,dur:valid*slot.step,path:pts,mpp:mpp};
 }
 function finalize(slot){
   slot.samples.forEach(function(q){if(q.a){q.a.trunk=Math.max(0,q.a.trunkRaw-CAL.trunk);q.a.neck=Math.max(0,q.a.neckRaw-CAL.neck)}});
@@ -562,7 +617,104 @@ function applyReba(slot){
   });
   slot.reba=n?{peak:peak,peakT:pi*slot.step,avg:sum/n,pct:c.map(function(x){return x/n*100})}:null;
   slot.stats.reba=n?{peak:peak.total,avg:sum/n,pct:slot.reba.pct}:null;
+  applyRula(slot);
 }
+/* ---------- RULA ---------- */
+var RA=[[[1,2,2,2,2,3,3,3],[2,2,2,2,3,3,3,3],[2,3,3,3,3,3,4,4]],[[2,3,3,3,3,4,4,4],[3,3,3,3,3,4,4,4],[3,4,4,4,4,4,5,5]],[[3,3,4,4,4,4,5,5],[3,4,4,4,4,4,5,5],[4,4,4,4,4,5,5,5]],[[4,4,4,4,4,5,5,5],[4,4,4,4,4,5,5,5],[4,4,4,5,5,5,6,6]],[[5,5,5,5,5,6,6,7],[5,6,6,6,6,7,7,7],[6,6,6,7,7,7,7,8]],[[7,7,7,7,7,8,8,9],[8,8,8,8,8,9,9,9],[9,9,9,9,9,9,9,9]]];
+var RB=[[[1,3],[2,3],[3,4],[5,5],[6,6],[7,7]],[[2,3],[2,3],[4,5],[5,5],[6,7],[7,7]],[[3,3],[3,4],[4,5],[5,6],[6,7],[7,7]],[[5,5],[5,6],[6,7],[7,7],[7,7],[8,8]],[[7,7],[7,7],[7,8],[8,8],[8,8],[8,8]],[[8,8],[8,8],[8,8],[8,9],[9,9],[9,9]]];
+var RC=[[1,2,3,3,4,5,5],[2,2,3,4,4,5,5],[3,3,3,4,4,5,6],[3,3,3,4,5,6,6],[4,4,4,5,6,7,7],[4,4,5,6,6,7,7],[5,5,6,6,7,7,7],[5,5,6,7,7,7,7]];
+function rulaOf(a,m){
+  if(!a||a.trunk==null)return null;
+  var r={},rep=m["static"]||m.repeat;
+  r.ua=cl((a.arm==null||a.arm<=20?1:a.arm<=45?2:a.arm<=90?3:4)+(m.abduct?1:0)+(m.shoulderUp?1:0)-(m.armSupport?1:0),1,6);
+  r.la=(a.elbow==null||(a.elbow>=60&&a.elbow<=100))?1:2;
+  r.wr=cl((m.wrist>=2?3:2)+(m.wristTwist?1:0),1,4);
+  r.tA=RA[r.ua-1][r.la-1][(r.wr-1)*2];
+  r.mus=rep?1:0;
+  r.force=m.load===0?0:m.load===1?(rep?2:1):(rep||m.shock?3:2);
+  r.A=r.tA+r.mus+r.force;
+  r.neck=cl((a.neck==null||a.neck<=10?1:a.neck<=20?2:3)+(m.neckTwist?1:0),1,6);
+  r.trunk=cl((a.trunk<5?1:a.trunk<=20?2:a.trunk<=60?3:4)+(m.trunkTwist?1:0),1,6);
+  r.legs=m.oneLeg?2:1;
+  r.tB=RB[r.neck-1][r.trunk-1][r.legs-1];
+  r.B=r.tB+r.mus+r.force;
+  r.total=RC[cl(r.A,1,8)-1][cl(r.B,1,7)-1];r.a=a;
+  return r;
+}
+function applyRula(slot){
+  var sum=0,n=0,peak=null,pi=0;
+  slot.samples.forEach(function(q,i){
+    if(!q.a)return;var r=rulaOf(q.a,slot.manual);if(!r)return;
+    n++;sum+=r.total;
+    if(!peak||r.total>peak.total||(r.total===peak.total&&q.a.arm>peak.a.arm)){peak=r;pi=i}
+  });
+  slot.rula=n?{peak:peak,peakT:pi*slot.step,avg:sum/n}:null;
+}
+function rulaBand(t){return t<=2?0:t<=4?1:2}
+function rulaLevel(t){
+  return t<=2?["Прийнятна поза","Зміни не потрібні, якщо поза не утримується довго."]:
+    t<=4?["Потрібне подальше вивчення","Зміни можуть знадобитися."]:
+    t<=6?["Вивчити і змінити найближчим часом","Поза помітно навантажує верхні кінцівки."]:
+    ["Змінити негайно","Найвищий рівень дій за RULA."];
+}
+
+/* ---------- NIOSH lifting equation ---------- */
+var FMT=[[0.2,1,1,.95,.95,.85,.85],[0.5,.97,.97,.92,.92,.81,.81],[1,.94,.94,.88,.88,.75,.75],[2,.91,.91,.84,.84,.65,.65],[3,.88,.88,.79,.79,.55,.55],[4,.84,.84,.72,.72,.45,.45],[5,.80,.80,.60,.60,.35,.35],[6,.75,.75,.50,.50,.27,.27],[7,.70,.70,.42,.42,.22,.22],[8,.60,.60,.35,.35,.18,.18],[9,.52,.52,.30,.30,0,.15],[10,.45,.45,.26,.26,0,.13],[11,.41,.41,0,.23,0,0],[12,.37,.37,0,.21,0,0],[13,0,.34,0,0,0,0],[14,0,.31,0,0,0,0],[15,0,.28,0,0,0,0]];
+function fmOf(F,dur,V){
+  var col=1+dur*2+(V>=75?1:0),i;
+  if(F<=0.2)return FMT[0][col];
+  if(F>15)return 0;
+  for(i=1;i<FMT.length;i++){if(F<=FMT[i][0]){var a=FMT[i-1],b=FMT[i],u=(F-a[0])/(b[0]-a[0]);return a[col]+(b[col]-a[col])*u}}
+  return 0;
+}
+function nDefaults(){return {w:10,H:40,V:30,D:60,A:0,F:2,dur:2}}
+function niosh(n,coupling){
+  var o={};
+  o.HM=n.H>63?0:25/Math.max(25,n.H);
+  o.VM=n.V>175?0:1-0.003*Math.abs(n.V-75);
+  o.DM=n.D>175?0:Math.min(1,0.82+4.5/Math.max(25,n.D));
+  o.AM=n.A>135?0:1-0.0032*n.A;
+  o.FM=fmOf(n.F,n.dur,n.V);
+  o.CM=coupling===0?1:coupling===1?(n.V<75?0.95:1):0.9;
+  o.RWL=23*o.HM*o.VM*o.DM*o.AM*o.FM*o.CM;
+  o.LI=o.RWL>0?n.w/o.RWL:null;
+  return o;
+}
+function nioshOf(slot){return niosh(slot.niosh,slot.manual.coupling)}
+function nioshEstimate(slot){
+  var mv=slot.move;if(!mv||!mv.mpp)return null;
+  var vs=[],best=null;
+  slot.samples.forEach(function(q){
+    if(!q.lm||!q.a)return;var P=q.lm;
+    if(Math.max(P[15][2],P[16][2])<0.3)return;
+    var wr=P[15][2]>=P[16][2]?P[15]:P[16],an=mid(P,27,28);
+    var V=(an[1]-wr[1])*mv.mpp*100+8,H=Math.abs(wr[0]-an[0])*mv.mpp*100;
+    vs.push(V);if(!best||V<best.V)best={V:V,H:H};
+  });
+  if(vs.length<5)return null;
+  return {V:cl(Math.round(best.V),0,175),H:cl(Math.round(best.H),25,80),D:cl(Math.round(pctl(vs,0.95)-pctl(vs,0.05)),25,175)};
+}
+
+/* ---------- operation elements ---------- */
+function elements(slot){
+  var ms=(slot.marks||[]).slice().sort(function(a,b){return a.t-b.t}),out=[];
+  ms.forEach(function(m,i){
+    var t1=i+1<ms.length?ms[i+1].t:slot.duration,i0=Math.round(m.t/slot.step),i1=Math.round(t1/slot.step),sum=0,n=0,peak=null,red=0,j;
+    for(j=i0;j<i1&&j<slot.samples.length;j++){
+      var q=slot.samples[j];if(!q.a||q.a.reba==null)continue;
+      n++;sum+=q.a.reba;if(peak==null||q.a.reba>peak)peak=q.a.reba;if(q.a.trunk>60)red++;
+    }
+    out.push({m:m,t0:m.t,dur:Math.max(0,t1-m.t),avg:n?sum/n:null,peak:peak,red:n?red/n*100:null});
+  });
+  return out;
+}
+var ELC={va:"додає цінність",nn:"необхідна",w:"втрата"};
+function elShare(els){
+  var tot=0,sh={va:0,nn:0,w:0};els.forEach(function(e){tot+=e.dur;sh[e.m.c]+=e.dur});
+  return {tot:tot,va:tot?sh.va/tot*100:0,nn:tot?sh.nn/tot*100:0,w:tot?sh.w/tot*100:0};
+}
+function esc(t){return String(t).replace(/[&<>"]/g,function(ch){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]})}
+
 function rebaLevel(t){
   return t<=1?["Незначний ризик","Зміни не потрібні."]:
     t<=3?["Низький ризик","Зміни можуть знадобитися."]:
@@ -592,7 +744,7 @@ function demoSlot(maxTrunk,maxKnee,armLift){
     samples.push({lm:P,a:angles(P)});
   }
   var s={video:null,demo:true,w:W,h:H,duration:dur,step:step,samples:samples,t:0};
-  smooth(samples);s.manual=defaults();finalize(s);return s;
+  smooth(samples);s.manual=defaults();s.marks=[];s.niosh=nDefaults();finalize(s);return s;
 }
 var slots={before:demoSlot(82,28,6),after:demoSlot(30,12,28)};
 var cur="before",both=false,chartKey="trunk",playing=false,lastTs=0,busy=0,blurOn=true,trailOn=false,grabbing=false;
@@ -689,7 +841,7 @@ async function probe(pose,v,px,py){
 function makePreview(key,v,file,full){
   var sc0=Math.min(1,480/Math.max(v.videoWidth,v.videoHeight));
   var pv={video:v,demo:false,preview:true,w:Math.round(v.videoWidth*sc0),h:Math.round(v.videoHeight*sc0),duration:full,step:0.1,samples:[],t:0,t0:0,name:file.name,file:file,full:full,range:null};
-  pv.manual=Object.assign({},slots[key].manual);finalize(pv);slots[key]=pv;return pv;
+  pv.manual=Object.assign({},slots[key].manual);pv.marks=[];pv.niosh=Object.assign({},slots[key].niosh||nDefaults());finalize(pv);slots[key]=pv;return pv;
 }
 async function analyze(key,file,range,whole,pick){
   var my=++busy;playing=false;pickMode=false;
@@ -749,7 +901,7 @@ async function analyze(key,file,range,whole,pick){
     }
     smooth(samples);
     var slot={video:v,demo:false,w:w,h:h,duration:dur,step:step,samples:samples,t:0,t0:t0,file:file,full:full,range:range?[t0,t1]:null,pick:pick||null,tracked:!!pick,name:file.name+(range?" ("+mmss(t0)+"–"+mmss(t1)+")":"")};
-    slot.manual=Object.assign({},slots[key].manual);finalize(slot);
+    slot.manual=Object.assign({},slots[key].manual);slot.marks=[];slot.niosh=Object.assign({},slots[key].niosh||nDefaults());finalize(slot);
     slots[key]=slot;
     v.currentTime=t0+peakTime(slot);
     if(slot.stats.coverage<0.3)setStatus("Людину розпізнано менш ніж на третині кадрів. Зніміть збоку, щоб працівник був у кадрі на повний зріст і його не закривало обладнання.",true);
@@ -1149,6 +1301,49 @@ function renderExposure(){
     return '<tr><td>'+r.name+'</td><td class="num">'+nf(r.b)+'</td><td class="num">'+nf(r.a)+'</td><td class="num '+cls+'">'+(r.d==null?"–":(r.d>0?"+":"")+nf(r.d))+'</td></tr>';
   }).join("");
 }
+function renderRula(){
+  var slot=slots[cur],R=slot.rula;
+  $("rulaTitle").textContent="RULA, верхні кінцівки: "+LABEL[cur];
+  if(!R){$("rulaScore").textContent="–";$("rulaScore").className="score p0";$("rulaLevel").textContent="Немає даних";$("rulaText").textContent="";$("rulaTbl").innerHTML="";$("rulaJump").hidden=true;return}
+  var p=R.peak,a=p.a,lv=rulaLevel(p.total);
+  $("rulaJump").hidden=false;
+  $("rulaScore").textContent=p.total;$("rulaScore").className="score p"+rulaBand(p.total);
+  $("rulaLevel").textContent=lv[0];
+  $("rulaText").textContent=lv[1]+" Найгірша поза на "+R.peakT.toFixed(1)+" с, середній бал "+R.avg.toFixed(1)+".";
+  var row=function(n,ang,sc,cls){return '<tr'+(cls?' class="'+cls+'"':'')+'><td>'+n+'</td><td class="num">'+(ang==null?"":fmt(ang)+"°")+'</td><td class="num">'+sc+'</td></tr>'};
+  $("rulaTbl").innerHTML='<tr><th>Компонент</th><th>Кут</th><th>Бал</th></tr>'+
+    row("Плече",a.arm,p.ua)+row("Передпліччя",a.elbow,p.la)+row("Зап'ястя",null,p.wr)+row("Таблиця A",null,p.tA)+row("Робота м'язів",null,"+"+p.mus)+row("Сила",null,"+"+p.force)+row("Бал A",null,p.A,"sub")+
+    row("Шия",a.neck,p.neck)+row("Тулуб",a.trunk,p.trunk)+row("Ноги",null,p.legs)+row("Таблиця B",null,p.tB)+row("Бал B",null,p.B,"sub")+row("RULA",null,p.total,"total");
+}
+var NNAME={HM:"відстань рук від тіла",VM:"висота захвату",DM:"вертикальне переміщення",AM:"поворот тулуба",FM:"частота і тривалість",CM:"захват"},nioshFor=null;
+function renderNiosh(force){
+  var slot=slots[cur],n=slot.niosh;
+  $("nioshTitle").textContent="NIOSH, підйом вантажу: "+LABEL[cur];
+  if(force||nioshFor!==slot){nioshFor=slot;["w","H","V","D","A","F"].forEach(function(k){$("n-"+k).value=n[k]});$("n-dur").value=String(n.dur)}
+  var o=nioshOf(slot),el=$("nioshLI");
+  if(o.LI==null){
+    el.textContent="–";el.className="score p2";$("nioshLevel").textContent="Поза межами рівняння";
+    $("nioshText").textContent="Один із параметрів виходить за межі методу: наприклад, відстань понад 63 см або зависока частота. Такий підйом вручну неприпустимий.";
+  }else{
+    var b=o.LI<=1?0:o.LI<=3?1:2;
+    el.textContent=o.LI.toFixed(1);el.className="score p"+b;
+    $("nioshLevel").textContent="Індекс підйому "+o.LI.toFixed(2)+": "+["прийнятно","підвищений ризик","високий ризик"][b];
+    var worst="HM";["VM","DM","AM","FM","CM"].forEach(function(k){if(o[k]<o[worst])worst=k});
+    $("nioshText").textContent="Рекомендована гранична вага "+o.RWL.toFixed(1)+" кг при фактичній "+n.w+" кг."+(o[worst]<0.95?" Найбільше знижує межу: "+NNAME[worst]+" (множник "+o[worst].toFixed(2)+").":"");
+  }
+  $("nioshMult").innerHTML=["HM","VM","DM","AM","FM","CM"].map(function(k){return '<span'+(o[k]<0.7?' class="p2"':o[k]<0.9?' class="p1"':'')+'>'+k+' '+o[k].toFixed(2)+'</span>'}).join("");
+}
+function renderElements(){
+  var slot=slots[cur],els=elements(slot);
+  $("elTitle").textContent="Елементи операції: "+LABEL[cur];
+  $("elBar").hidden=!els.length;
+  var sh=elShare(els);
+  $("elBar").innerHTML=els.map(function(e){return '<i class="'+e.m.c+'" style="width:'+(sh.tot?e.dur/sh.tot*100:0)+'%" title="'+esc(e.m.name)+'"></i>'}).join("");
+  $("elTbl").innerHTML=els.length?'<tr><th>Елемент</th><th>Початок</th><th>Тривалість</th><th>Частка</th><th>REBA сер.</th><th>REBA пік</th><th></th></tr>'+els.map(function(e){
+    return '<tr><td><span class="sw" style="background:var('+(e.m.c==="va"?"--ok":e.m.c==="nn"?"--warn":"--bad")+')"></span>'+esc(e.m.name)+'</td><td class="num">'+e.t0.toFixed(1)+' с</td><td class="num">'+e.dur.toFixed(1)+' с</td><td class="num">'+fmt(sh.tot?e.dur/sh.tot*100:0)+'%</td><td class="num">'+fmt(e.avg,1)+'</td><td class="num">'+(e.peak==null?"–":'<span class="pill p'+rebaBand(e.peak)+'">'+e.peak+'</span>')+'</td><td><button type="button" class="xbtn" data-del="'+slot.marks.indexOf(e.m)+'" aria-label="Видалити елемент">×</button></td></tr>';
+  }).join(""):"";
+  $("elSum").textContent=els.length?"Разом "+sh.tot.toFixed(1)+" с. Додає цінність "+fmt(sh.va)+"%, необхідна без цінності "+fmt(sh.nn)+"%, втрати "+fmt(sh.w)+"%.":"Позначок ще немає.";
+}
 function verdict(){
   var rb=slots.before.reba,ra=slots.after.reba;if(!rb||!ra)return null;
   var tb=rb.peak.total,ta=ra.peak.total,lb=rebaLevel(tb)[0].toLowerCase(),la=rebaLevel(ta)[0].toLowerCase();
@@ -1173,6 +1368,9 @@ function cmpRows(){
   var cb=slots.before.cycles,ca=slots.after.cycles;
   add("Середній цикл",cb&&cb.mean,ca&&ca.mean," с",1);
   add("Повторів за хвилину",cb&&cb.rpm,ca&&ca.rpm,"",1,true);
+  var ub=slots.before.rula,ua=slots.after.rula;
+  add("RULA, найгірша поза",ub&&ub.peak.total,ua&&ua.peak.total,"");
+  add("NIOSH, індекс підйому",nioshOf(slots.before).LI,nioshOf(slots.after).LI,"",2);
   return rows;
 }
 function rebaInfo(slot){
@@ -1238,6 +1436,9 @@ function summaryText(){
     var s=slots[k];out.push("");out.push(LABEL[k]+(s.demo?" (приклад)":s.name?" ("+s.name+")":"")+":");
     if(s.reba){var p=s.reba.peak;out.push("  REBA: "+p.total+" ("+rebaLevel(p.total)[0].toLowerCase()+"), найгірша поза на "+s.reba.peakT.toFixed(1)+" с; бал A "+p.A+", бал B "+p.B+", таблиця C "+p.C+", активність +"+p.act+"; середній за цикл "+s.reba.avg.toFixed(1))}
     KEYS.forEach(function(j){var st=s.stats[j];out.push("  "+J[j].name+": "+(st?"середній "+fmt(st.avg)+"°, пік "+fmt(st.peak)+"°, зелена/жовта/червона "+fmt(st.pct[0])+"/"+fmt(st.pct[1])+"/"+fmt(st.pct[2])+"%":"не видно"))});
+    if(s.rula)out.push("  RULA: "+s.rula.peak.total+" ("+rulaLevel(s.rula.peak.total)[0].toLowerCase()+")");
+    var no=nioshOf(s);out.push("  NIOSH: гранична вага "+no.RWL.toFixed(1)+" кг, індекс підйому "+(no.LI==null?"поза межами":no.LI.toFixed(2))+" (вага "+s.niosh.w+" кг)");
+    var els=elements(s);if(els.length){out.push("  Елементи:");els.forEach(function(e){out.push("   - "+e.m.name+" ("+ELC[e.m.c]+"): "+e.dur.toFixed(1)+" с, REBA сер. "+fmt(e.avg,1)+", пік "+(e.peak==null?"–":e.peak))})}
     var cy=s.cycles;
     if(cy&&cy.mean)out.push("  Цикли: "+cy.n+" повторів, середній цикл "+fmt(cy.mean,1)+" с, найкращий "+fmt(cy.min,1)+" с, "+fmt(cy.rpm,1)+" повторів за хвилину");
     out.push("  Індекс навантаження (0–100): "+regions(s).map(function(r){return r.name.toLowerCase()+" "+(r.idx==null?"–":fmt(r.idx))}).join(", "));
@@ -1263,7 +1464,7 @@ function renderAll(){
   $("pClear").hidden=!rs.pick&&!pickMode;$("view").style.cursor=pickMode&&!both?"crosshair":"";
   $("fileLabel").textContent="Обрати відео «"+LABEL[cur]+"»";
   $("demoTag").hidden=!active().some(function(sl){return sl.demo});
-  syncPlayBtn();renderSummary();renderReba();renderAdvice();renderBody();renderCycles();renderJoints();renderCmp();renderExposure();renderBoth();$("pdfBtn").textContent=both?"Звіт PDF: до і після":"Звіт PDF: "+LABEL[cur];drawView();drawChart();
+  syncPlayBtn();renderSummary();renderReba();renderAdvice();renderRula();renderNiosh();renderBody();renderCycles();renderElements();renderJoints();renderCmp();renderExposure();renderBoth();$("pdfBtn").textContent=both?"Звіт PDF: до і після":"Звіт PDF: "+LABEL[cur];drawView();drawChart();
 }
 
 /* ---------- before/after card ---------- */
@@ -1513,6 +1714,17 @@ function repVariant(R,key,shot,single){
       R.table([{w:0.7},{w:0.3,align:"right",mono:true}],EXPN.map(function(n,i){return [n,nf(ex[i])]}),["Показник ("+io[0]+" год за зміну, "+io[1]+" змін на рік)","Значення"]);
     }
   }
+  var els=elements(sl);
+  if(els.length){
+    var esh=elShare(els);
+    R.h3("Елементи операції",R.th(els.length));
+    R.table([{w:0.34},{w:0.18},Object.assign({w:0.16},num),Object.assign({w:0.16},num),Object.assign({w:0.16},num)],els.map(function(e){return [e.m.name,ELC[e.m.c],e.dur.toFixed(1)+" с",fmt(e.avg,1),e.peak==null?"–":e.peak]}),["Елемент","Тип","Тривалість","REBA сер.","REBA пік"]);
+    R.para("Додає цінність "+fmt(esh.va)+"%, необхідна без цінності "+fmt(esh.nn)+"%, втрати "+fmt(esh.w)+"% розміченого часу.",{size:25,color:MUT});
+  }
+  R.h3("Інші методики");
+  if(sl.rula)R.para("RULA (верхні кінцівки): "+sl.rula.peak.total+" з 7, "+rulaLevel(sl.rula.peak.total)[0].toLowerCase()+". Бал A "+sl.rula.peak.A+", бал B "+sl.rula.peak.B+".");
+  var no=nioshOf(sl),nn=sl.niosh;
+  R.para("NIOSH (підйом вантажу): гранична вага "+no.RWL.toFixed(1)+" кг, фактична "+nn.w+" кг, індекс підйому "+(no.LI==null?"поза межами рівняння":no.LI.toFixed(2))+". Параметри: відстань "+nn.H+" см, висота "+nn.V+" см, переміщення "+nn.D+" см, поворот "+nn.A+"°, "+nn.F+" підйомів за хвилину, тривалість "+["до 1 год","1–2 год","2–8 год"][nn.dur]+".");
   var ad=advice(sl);
   if(ad){
     R.h3("Ризики");ad.risks.forEach(function(r){R.risk(r.l,r.t,r.x)});
@@ -1743,6 +1955,93 @@ $("view").addEventListener("click",async function(e){
     setStatus("Людину обрано, вона в рамці. Тепер натисніть «Аналізувати відрізок» або «Усе відео».");renderAll();
   }catch(err){setStatus("Не вдалося обрати людину: "+(err&&err.message||err),true);renderAll()}
 });
+$("rulaJump").addEventListener("click",function(){
+  var sl=slots[cur];if(!sl.rula)return;pauseAll();syncPlayBtn();setTime(sl,sl.rula.peakT);
+  document.querySelector(".stage").scrollIntoView({block:"center"});
+});
+["w","H","V","D","A","F","dur"].forEach(function(k){
+  $("n-"+k).addEventListener("change",function(e){
+    var v=parseFloat(e.target.value);if(!isFinite(v)||v<0)v=0;
+    slots[cur].niosh[k]=k==="dur"?Math.round(v):v;renderNiosh();renderCmp();
+  });
+});
+$("n-est").addEventListener("click",function(){
+  var sl=slots[cur],e=nioshEstimate(sl),st=$("nioshStatus");
+  if(!e){st.textContent="Не вдалося оцінити: на відео не видно рук або людину не розпізнано.";return}
+  sl.niosh.H=e.H;sl.niosh.V=e.V;sl.niosh.D=e.D;
+  if(sl.cycles&&sl.cycles.rpm)sl.niosh.F=Math.round(sl.cycles.rpm*10)/10;
+  st.textContent="Підставлено з відео: відстань "+e.H+" см, висота "+e.V+" см, переміщення "+e.D+" см"+(sl.cycles&&sl.cycles.rpm?", частота "+sl.niosh.F+" за хвилину":"")+". Вагу введіть самі.";
+  renderNiosh(true);renderCmp();
+});
+$("elAdd").addEventListener("click",function(){
+  var sl=slots[cur],st=$("elStatus"),name=$("elName").value.trim();
+  if(!name){st.textContent="Введіть назву елемента.";return}
+  var t=Math.round(now(sl)/sl.step)*sl.step;
+  if(sl.marks.some(function(m){return Math.abs(m.t-t)<sl.step/2})){st.textContent="На цьому кадрі вже є позначка.";return}
+  pauseAll();syncPlayBtn();
+  sl.marks.push({t:t,name:name,c:$("elClass").value});
+  st.textContent="Позначено «"+name+"» на "+t.toFixed(1)+" с.";$("elName").value="";renderElements();
+});
+$("elTbl").addEventListener("click",function(e){
+  var b=e.target.closest?e.target.closest("[data-del]"):null;if(!b)return;
+  slots[cur].marks.splice(parseInt(b.getAttribute("data-del"),10),1);$("elStatus").textContent="";renderElements();
+});
+var frontRes=null;
+async function analyzeFront(file){
+  var my=++busy,st=$("frontStatus"),pr=$("frontProg");
+  playing=false;pickMode=false;frontRes=null;$("frontTbl").innerHTML="";$("frontBtns").hidden=true;
+  var v=document.createElement("video");v.muted=true;v.playsInline=true;v.preload="auto";v.src=URL.createObjectURL(file);
+  pr.hidden=false;pr.value=0;st.textContent="Відкриваю відео…";
+  try{
+    if(v.readyState<1)await once(v,"loadedmetadata",8000);
+    if(!v.videoWidth||!isFinite(v.duration)||v.duration<=0)throw new Error("Не вдалося відкрити файл як відео.");
+    try{await v.play();v.pause()}catch(e0){}
+    st.textContent="Завантажую модель…";
+    var pose=await ensurePose();if(my!==busy)return;
+    pose.reset();
+    var dur=v.duration,step=Math.max(0.2,dur/300),sc=Math.min(1,480/Math.max(v.videoWidth,v.videoHeight)),w=Math.round(v.videoWidth*sc),h=Math.round(v.videoHeight*sc);
+    var off=document.createElement("canvas");off.width=w;off.height=h;var octx=off.getContext("2d");
+    var tr=[],nk=[],aL=[],aR=[],frames=0,t;
+    for(t=0;t<dur;t+=step){
+      if(my!==busy)return;
+      v.currentTime=Math.min(t,dur-0.01);await once(v,"seeked",3000);
+      octx.drawImage(v,0,0,w,h);lastRes=null;await pose.send({image:off});
+      frames++;pr.value=t/dur;st.textContent="Аналізую вид спереду: "+Math.round(t/dur*100)+"%";
+      var lm=lastRes&&lastRes.poseLandmarks;if(!lm||lm.length<29)continue;
+      var P=lm.map(function(q){return [q.x*w,q.y*h,q.visibility==null?1:q.visibility]});
+      if(Math.min(P[11][2],P[12][2],P[23][2],P[24][2])<0.4)continue;
+      var sh=mid(P,11,12),hp=mid(P,23,24),er=mid(P,7,8),tx=sh[0]-hp[0],ty=sh[1]-hp[1];
+      tr.push(ang(tx,ty,0,-1));nk.push(ang(er[0]-sh[0],er[1]-sh[1],tx,ty));
+      if(P[13][2]>0.3)aL.push(ang(P[13][0]-P[11][0],P[13][1]-P[11][1],P[23][0]-P[11][0],P[23][1]-P[11][1]));
+      if(P[14][2]>0.3)aR.push(ang(P[14][0]-P[12][0],P[14][1]-P[12][1],P[24][0]-P[12][0],P[24][1]-P[12][1]));
+    }
+    if(tr.length<5)throw new Error("Людину розпізнано замало: зніміть спереду на повний зріст.");
+    var over=function(arr,lim){var c=0;arr.forEach(function(x){if(x>lim)c++});return arr.length?c/arr.length*100:0};
+    var mean=function(arr){return arr.length?arr.reduce(function(a,b){return a+b},0)/arr.length:null};
+    frontRes={n:tr.length,frames:frames,trunk:{p:pctl(tr,0.95),o:over(tr,10)},neck:{p:pctl(nk,0.95),o:over(nk,15)},
+      aL:aL.length?{p:pctl(aL,0.95),o:over(aL,45),m:mean(aL)}:null,aR:aR.length?{p:pctl(aR,0.95),o:over(aR,45),m:mean(aR)}:null};
+    frontRes.flags={trunkTwist:frontRes.trunk.o>=10,neckTwist:frontRes.neck.o>=10,abduct:!!((frontRes.aL&&frontRes.aL.o>=10)||(frontRes.aR&&frontRes.aR.o>=10))};
+    var f=frontRes,yn=function(x){return x?'<span class="pill p1">так</span>':'<span class="pill p0">ні</span>'};
+    var arm=function(n,x){return x?'<tr><td>Відведення плеча, '+n+'</td><td class="num">'+fmt(x.p)+'°</td><td class="num">'+fmt(x.o)+'% понад 45°</td><td></td></tr>':''};
+    $("frontTbl").innerHTML='<tr><th>Показник</th><th>Майже найбільше</th><th>Частка часу</th><th>Позначка REBA</th></tr>'+
+      '<tr><td>Бічний нахил тулуба</td><td class="num">'+fmt(f.trunk.p)+'°</td><td class="num">'+fmt(f.trunk.o)+'% понад 10°</td><td>'+yn(f.flags.trunkTwist)+'</td></tr>'+
+      '<tr><td>Бічний нахил шиї</td><td class="num">'+fmt(f.neck.p)+'°</td><td class="num">'+fmt(f.neck.o)+'% понад 15°</td><td>'+yn(f.flags.neckTwist)+'</td></tr>'+
+      arm("ліве",f.aL)+arm("праве",f.aR)+'<tr><td>Плече відведене вбік</td><td></td><td></td><td>'+yn(f.flags.abduct)+'</td></tr>';
+    var sym=f.aL&&f.aR&&Math.abs(f.aL.m-f.aR.m)>=10?" Руки навантажені несиметрично: середнє відведення лівої "+fmt(f.aL.m)+"°, правої "+fmt(f.aR.m)+"°.":"";
+    st.textContent="Готово: людину розпізнано на "+Math.round(f.n/f.frames*100)+"% кадрів."+sym+" Перенесіть позначки у форму потрібного варіанта.";
+    $("frontBtns").hidden=false;
+  }catch(e){st.textContent=(e&&e.message)||String(e)}
+  finally{if(my===busy)pr.hidden=true}
+}
+$("frontFile").addEventListener("change",function(e){var f=e.target.files&&e.target.files[0];e.target.value="";if(f){pauseAll();syncPlayBtn();analyzeFront(f)}});
+function frontTo(key){
+  if(!frontRes)return;var m=slots[key].manual,fl=frontRes.flags;
+  m.trunkTwist=fl.trunkTwist;m.neckTwist=fl.neckTwist;m.abduct=fl.abduct;
+  applyReba(slots[key]);renderAll();
+  $("frontStatus").textContent="Позначки перенесено у форму «"+LABEL[key]+"»: тулуб убік "+(fl.trunkTwist?"так":"ні")+", шия вбік "+(fl.neckTwist?"так":"ні")+", плече відведене "+(fl.abduct?"так":"ні")+".";
+}
+$("frontToB").addEventListener("click",function(){frontTo("before")});
+$("frontToA").addEventListener("click",function(){frontTo("after")});
 $("csvBtn").addEventListener("click",function(){saveFile("reba-data-"+dIso()+".csv",new Blob([csvData()],{type:"text/csv"}),$("outStatus"))});
 $("trail").addEventListener("change",function(e){trailOn=e.target.checked;["before","after"].forEach(function(k){slots[k].shot=null})});
 function stepBy(dir){
