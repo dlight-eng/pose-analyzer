@@ -157,6 +157,16 @@ main.both #outSec{order:-1}
 .check input{width:18px;height:18px;accent-color:var(--accent)}
 input[type=text]{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-height:42px;flex:1;min-width:180px}
 #cardImg{display:block;max-width:100%;height:auto;border:1px solid var(--line);border-radius:8px}
+/* Desktop: video stays in a sticky left column, results scroll on the right. */
+@media (min-width:1080px){
+  main{max-width:1480px;display:grid;grid-template-columns:minmax(400px,560px) minmax(0,1fr);column-gap:20px;row-gap:0;align-items:start;padding:20px 24px 48px}
+  main>header{grid-column:1/-1;margin-bottom:16px}
+  main>section{grid-column:2;margin-bottom:16px;min-width:0}
+  main>section:first-of-type{grid-column:1;grid-row:2/span 80;position:sticky;top:12px;max-height:calc(100vh - 24px);overflow-y:auto;margin-bottom:0}
+  #view{max-height:max(260px,calc(100vh - 420px))}
+  .lede{max-width:90ch}
+  .tiles4{grid-template-columns:repeat(4,1fr)}
+}
 @media (prefers-reduced-motion: reduce){*{scroll-behavior:auto}}
 </style>
 </head>
